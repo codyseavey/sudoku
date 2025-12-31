@@ -57,7 +57,31 @@ func Solve(initialBoard Grid, size int) (Grid, bool) {
 		copy(solution[i], initialBoard[i])
 	}
 
-	// 3. Solve
+	// 3. Check for uniqueness
+	// We need to count solutions. If > 1, it's invalid for a custom puzzle.
+	count := 0
+	
+	// solveCount modifies the grid, so use a copy for counting if we want to preserve 'solution' for the final return
+	// Actually, solveCount will zero out the grid as it backtracks.
+	// So we should run it on 'solution' copy.
+	
+	countGrid := make(Grid, gen.N)
+	for i := range initialBoard {
+		countGrid[i] = make([]int, gen.N)
+		copy(countGrid[i], initialBoard[i])
+	}
+	
+	gen.solveCount(countGrid, &count)
+	
+	if count == 0 {
+		return nil, false // No solution
+	}
+	if count > 1 {
+		return nil, false // Multiple solutions
+	}
+
+	// 4. Fill the single solution for return
+	// Since count == 1, we can just run fillGrid to get it.
 	if gen.fillGrid(solution) {
 		return solution, true
 	}

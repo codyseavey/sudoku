@@ -51,7 +51,8 @@ func main() {
 
 		solution, solvable := sudoku.Solve(req.Board, req.Size)
 		if !solvable {
-			http.Error(w, "Unsolvable puzzle", http.StatusBadRequest)
+			// sudoku.Solve now returns false if count != 1.
+			http.Error(w, "Invalid puzzle: Must have exactly one unique solution", http.StatusBadRequest)
 			return
 		}
 
