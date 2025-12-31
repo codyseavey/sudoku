@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, onUnmounted } from 'vue'
 
 const props = defineProps<{
     initialDifficulty: string,
@@ -25,8 +25,45 @@ const message = ref('')
 const isNoteMode = ref(false)
 const difficulty = ref(props.initialDifficulty)
 const isDefiningCustom = ref(false) // State for entering custom puzzle
+const timer = ref(0)
+const isPaused = ref(false)
+let timerInterval: number | undefined
 
 const STORAGE_KEY = `sudoku_game_state_${props.size}`
+
+// Timer Logic
+const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+}
+
+const startTimer = () => {
+    if (timerInterval) return
+    isPaused.value = false
+    timerInterval = window.setInterval(() => {
+        timer.value++
+    }, 1000)
+}
+
+const pauseTimer = () => {
+    if (timerInterval) {
+        clearInterval(timerInterval)
+        timerInterval = undefined
+    }
+    isPaused.value = true
+}
+
+const resumeTimer = () => {
+    startTimer()
+}
+
+const stopTimer = () => {
+    if (timerInterval) {
+        clearInterval(timerInterval)
+        timerInterval = undefined
+    }
+}
 
 // Initialize arrays based on size
 const initArrays = () => {
@@ -98,7 +135,8 @@ const saveGame = () => {
         history: serializeHistory(history.value),
         size: props.size,
         isCustomMode: props.isCustomMode,
-        isDefiningCustom: isDefiningCustom.value
+        isDefiningCustom: isDefiningCustom.value,
+        timer: timer.value
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(gameState))
 }
@@ -148,6 +186,9 @@ const loadGame = (): boolean => {
             if (gameState.isDefiningCustom !== undefined) {
                 isDefiningCustom.value = gameState.isDefiningCustom
             }
+            if (gameState.timer !== undefined) {
+                timer.value = gameState.timer
+            }
             return true
         } catch (e) {
             console.error("Failed to load game state", e)
@@ -168,11 +209,14 @@ const loadImportedPuzzle = (data: any) => {
     // Clear history/storage for this "new" game
     resetCandidates()
     history.value = []
+    timer.value = 0
+    startTimer()
     saveGame()
     message.value = 'Puzzle imported successfully.'
 }
 
 const startNewGame = () => {
+    stopTimer()
     emit('back-to-menu')
 }
 
@@ -207,6 +251,8 @@ const validateAndStartCustom = async () => {
         // Start Game
         isDefiningCustom.value = false
         message.value = 'Puzzle valid! Game started.'
+        timer.value = 0
+        startTimer()
         saveGame()
 
     } catch (e) {
@@ -272,6 +318,8 @@ const fetchPuzzle = async () => {
     // Reset candidates and elimination history
     resetCandidates()
     history.value = [] // Reset history
+    timer.value = 0
+    startTimer()
     saveGame() // Save initial state
   } catch (error) {
     console.error('Error fetching puzzle:', error)
@@ -306,6 +354,7 @@ const checkSolution = () => {
         }
     }
     message.value = 'Correct! Well done.'
+    stopTimer()
 }
 
 const isBoardFull = () => {
@@ -318,6 +367,7 @@ const showSolution = () => {
     board.value = solution.value.map(row => [...row])
     resetCandidates()
     message.value = 'Solution revealed.'
+    stopTimer()
 }
 
 const removeCandidates = (r: number, c: number, val: number) => {
@@ -483,9 +533,18 @@ const getValidNumbers = (row: number, col: number): number[] => {
 
 onMounted(() => {
     initArrays()
-    if (!loadGame()) {
+    if (loadGame()) {
+        // Resume timer if game loaded and not defining custom
+        if (!isDefiningCustom.value) {
+            startTimer()
+        }
+    } else {
         fetchPuzzle()
     }
+})
+
+onUnmounted(() => {
+    stopTimer()
 })
 </script>
 
@@ -499,7 +558,15 @@ onMounted(() => {
             <p>Fill in the initial numbers.</p>
         </div>
 
+        <div class="timer-display" v-else>
+            {{ formatTime(timer) }}
+        </div>
+
         <div class="grid" :class="`size-${size}`">
+            <div class="paused-overlay" v-if="isPaused">
+                <h2>PAUSED</h2>
+                <button class="primary-action" @click="resumeTimer">Resume</button>
+            </div>
         <div v-for="(row, rIndex) in board" :key="rIndex" class="row">
             <div v-for="(cell, cIndex) in row" :key="cIndex" class="cell">
                 <!-- Main Value Input -->
@@ -546,7 +613,10 @@ onMounted(() => {
             <!-- Normal Game Controls -->
             <div class="controls" v-else>
                 <button @click="startNewGame">New Game</button>
-                <button @click="undo">Undo</button>
+                <button @click="isPaused ? resumeTimer() : pauseTimer()">
+                    {{ isPaused ? 'Resume' : 'Pause' }}
+                </button>
+                <button @click="undo" :disabled="isPaused">Undo</button>
                 <button @click="shareGame">Share</button>
                 <button @click="showSolution" class="secondary">Show Solution</button>
             </div>
@@ -581,6 +651,15 @@ onMounted(() => {
     color: #dad4f6;
 }
 
+.timer-display {
+    text-align: center;
+    font-size: 2rem;
+    font-weight: bold;
+    color: #dad4f6;
+    margin-bottom: 1rem;
+    font-variant-numeric: tabular-nums;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(v-bind(size), 1fr);
@@ -590,6 +669,22 @@ onMounted(() => {
   gap: 0;
   width: 100%;
   max-width: 450px;
+  position: relative;
+}
+
+.paused-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.85);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: white;
 }
 
 .row {
@@ -776,5 +871,12 @@ button.active {
     font-weight: bold;
     font-size: 1.1rem;
     color: #dad4f6;
+}
+
+.game-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
 }
 </style>
