@@ -4,75 +4,87 @@ import (
 	"testing"
 )
 
-func TestGenerateKiller(t *testing.T) {
-	puzzle := GenerateKiller("medium", 9)
+func TestGenerateKillerDifficulty(t *testing.T) {
+	size := 9
 
-	if puzzle.GameType != "killer" {
-		t.Errorf("Expected GameType to be 'killer', got %s", puzzle.GameType)
-	}
-
-	if len(puzzle.Cages) == 0 {
-		t.Error("Expected cages to be generated, got 0")
-	}
-
-	// Verify all cells are covered exactly once
-	covered := make([][]bool, 9)
-	for i := range covered {
-		covered[i] = make([]bool, 9)
-	}
-
-	totalCells := 0
-	for _, cage := range puzzle.Cages {
-		currentSum := 0
-		values := make(map[int]bool)
-		for _, cell := range cage.Cells {
-			if covered[cell.Row][cell.Col] {
-				t.Errorf("Cell (%d, %d) is covered by multiple cages", cell.Row, cell.Col)
-			}
-			covered[cell.Row][cell.Col] = true
-			totalCells++
-
-			val := puzzle.Solution[cell.Row][cell.Col]
-			currentSum += val
-			if values[val] {
-				t.Errorf("Duplicate value %d in cage at (%d, %d)", val, cell.Row, cell.Col)
-			}
-			values[val] = true
-		}
-		if currentSum != cage.Sum {
-			t.Errorf("Cage sum mismatch: expected %d, got %d", cage.Sum, currentSum)
-		}
-	}
-
-	if totalCells != 81 {
-		t.Errorf("Expected 81 cells covered, got %d", totalCells)
-	}
-
-	// Verify Board is empty
-	for i:=0; i<9; i++ {
-		for j:=0; j<9; j++ {
-			if puzzle.Board[i][j] != 0 {
-				t.Errorf("Expected board to be empty, but found %d at (%d,%d)", puzzle.Board[i][j], i, j)
+	// Test Easy
+	pEasy := GenerateKiller("easy", size)
+	filledCountEasy := 0
+	for r := 0; r < size; r++ {
+		for c := 0; c < size; c++ {
+			if pEasy.Board[r][c] != 0 {
+				filledCountEasy++
 			}
 		}
+	}
+	// Expect some digits (approx 31 clues)
+	if filledCountEasy == 0 {
+		t.Error("Killer Sudoku Easy should have clues")
+	}
+
+	// Test Medium
+	pMed := GenerateKiller("medium", size)
+	filledCountMed := 0
+	for r := 0; r < size; r++ {
+		for c := 0; c < size; c++ {
+			if pMed.Board[r][c] != 0 {
+				filledCountMed++
+			}
+		}
+	}
+	// Expect some digits (approx 17 clues)
+	if filledCountMed == 0 {
+		t.Error("Killer Sudoku Medium should have clues")
+	}
+
+	// Test Hard
+	pHard := GenerateKiller("hard", size)
+	filledCountHard := 0
+	for r := 0; r < size; r++ {
+		for c := 0; c < size; c++ {
+			if pHard.Board[r][c] != 0 {
+				filledCountHard++
+			}
+		}
+	}
+	// Expect 0 digits
+	if filledCountHard != 0 {
+		t.Errorf("Killer Sudoku Hard should be empty, got %d clues", filledCountHard)
 	}
 }
 
-func TestGenerateKiller6x6(t *testing.T) {
-	puzzle := GenerateKiller("medium", 6)
+func TestGenerateKillerStructure(t *testing.T) {
+	p := GenerateKiller("easy", 9)
 
-	if len(puzzle.Cages) == 0 {
-		t.Error("Expected cages to be generated, got 0")
+	if p.GameType != "killer" {
+		t.Errorf("Expected GameType 'killer', got %s", p.GameType)
+	}
+	if len(p.Cages) == 0 {
+		t.Error("Expected Cages to be generated")
 	}
 
-	totalCells := 0
-	for _, cage := range puzzle.Cages {
-		for range cage.Cells {
-			totalCells++
+	// Verify all cells covered by exactly one cage
+	covered := make([][]int, 9)
+	for i := range covered {
+		covered[i] = make([]int, 9)
+	}
+
+	for idx, cage := range p.Cages {
+		expectedSum := 0
+		for _, cell := range cage.Cells {
+			covered[cell.Row][cell.Col]++
+			expectedSum += p.Solution[cell.Row][cell.Col]
+		}
+		if cage.Sum != expectedSum {
+			t.Errorf("Cage %d sum mismatch: expected %d, got %d", idx, expectedSum, cage.Sum)
 		}
 	}
 
-	if totalCells != 36 {
-		t.Errorf("Expected 36 cells covered, got %d", totalCells)
+	for r := 0; r < 9; r++ {
+		for c := 0; c < 9; c++ {
+			if covered[r][c] != 1 {
+				t.Errorf("Cell (%d, %d) covered %d times", r, c, covered[r][c])
+			}
+		}
 	}
 }

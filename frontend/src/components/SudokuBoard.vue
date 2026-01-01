@@ -167,8 +167,10 @@ const loadGame = (): boolean => {
             if (!props.isCustomMode && gameState.isCustomMode) return false // Wanted normal, found custom
 
             // Check game type mismatch
-            if (props.gameType && gameState.gameType !== props.gameType) return false
-            if (!props.gameType && gameState.gameType) return false
+            // Handle legacy saves where gameType is undefined (treat as 'standard')
+            const savedType = gameState.gameType || 'standard'
+            const currentType = props.gameType || 'standard'
+            if (savedType !== currentType) return false
 
             board.value = gameState.board
             isFixed.value = gameState.isFixed
@@ -355,53 +357,80 @@ watch([board, candidates, eliminatedCandidates, difficulty], () => {
 }, { deep: true })
 
 const checkSolution = () => {
-    if (solution.value.length === 0) return
+    // 1. Basic Completeness Check
+    if (!isBoardFull()) {
+        message.value = 'Incomplete! Fill all cells.'
+        return
+    }
 
-    // 1. Killer Sudoku specific validation (prioritize this for better feedback)
+    // 2. Validate Rules (Rows, Cols, Boxes)
+    // Rows
+    for (let r = 0; r < props.size; r++) {
+        const rowVals = new Set<number>()
+        for (let c = 0; c < props.size; c++) {
+            const val = board.value[r][c]!
+            if (rowVals.has(val)) {
+                message.value = `Duplicate number ${val} in Row ${r + 1}`
+                return
+            }
+            rowVals.add(val)
+        }
+    }
+
+    // Cols
+    for (let c = 0; c < props.size; c++) {
+        const colVals = new Set<number>()
+        for (let r = 0; r < props.size; r++) {
+            const val = board.value[r][c]!
+            if (colVals.has(val)) {
+                message.value = `Duplicate number ${val} in Column ${c + 1}`
+                return
+            }
+            colVals.add(val)
+        }
+    }
+
+    // Boxes
+    const boxH = props.size === 6 ? 2 : 3
+    const boxW = 3
+    for (let br = 0; br < props.size; br += boxH) {
+        for (let bc = 0; bc < props.size; bc += boxW) {
+             const boxVals = new Set<number>()
+             for (let i = 0; i < boxH; i++) {
+                 for (let j = 0; j < boxW; j++) {
+                     const val = board.value[br + i][bc + j]!
+                     if (boxVals.has(val)) {
+                         message.value = `Duplicate number ${val} in Box`
+                         return
+                     }
+                     boxVals.add(val)
+                 }
+             }
+        }
+    }
+
+    // 3. Killer Rules (if applicable)
     if (props.gameType === 'killer') {
         for (const cage of cages.value) {
             let currentSum = 0
-            let cageFilledCount = 0
-            const values = new Set<number>()
-
+            const cageVals = new Set<number>()
             for (const cell of cage.cells) {
-                const val = board.value[cell.row]?.[cell.col]
-                if (typeof val === 'number') {
-                    cageFilledCount++
-                    currentSum += val
-                    if (values.has(val)) {
-                         message.value = `Duplicate number ${val} in cage!`
-                         return
-                    }
-                    values.add(val)
+                const val = board.value[cell.row][cell.col]!
+                if (cageVals.has(val)) {
+                    message.value = `Duplicate number ${val} in a cage.`
+                    return
                 }
+                cageVals.add(val)
+                currentSum += val
             }
-
-            if (cageFilledCount < cage.cells.length) {
-                continue // Cage not full yet, skip sum check for now
-            }
-
             if (currentSum !== cage.sum) {
-                 message.value = `Cage sum mismatch. Expected ${cage.sum}, got ${currentSum}.`
-                 return
-            }
-        }
-
-        // If specific killer checks pass, but board not full or other errors, fall through to standard check
-    }
-
-    // 2. Check basic solution matching
-    for (let i = 0; i < props.size; i++) {
-        for (let j = 0; j < props.size; j++) {
-            const val = board.value[i]![j]
-            // Treat null as incorrect/incomplete
-            if (val === null || val !== solution.value[i]![j]) {
-                message.value = 'Incorrect or incomplete! Keep trying.'
+                message.value = `Cage sum mismatch. Expected ${cage.sum}, got ${currentSum}.`
                 return
             }
         }
     }
 
+    // If we passed all checks
     message.value = 'Correct! Well done.'
     stopTimer()
 }
@@ -809,10 +838,20 @@ onUnmounted(() => {
 }
 
 /* Killer Sudoku Cage Styling */
-.cage-border-top { border-top: 2px dotted #333; }
-.cage-border-bottom { border-bottom: 2px dotted #333; }
-.cage-border-left { border-left: 2px dotted #333; }
-.cage-border-right { border-right: 2px dotted #333; }
+/* Use pseudo-element for cage borders to avoid conflict with grid lines */
+.cell::after {
+    content: '';
+    position: absolute;
+    top: 4px; left: 4px; right: 4px; bottom: 4px;
+    pointer-events: none;
+    z-index: 10;
+    border: 0px dotted #555;
+}
+
+.cage-border-top::after { border-top-width: 2px; }
+.cage-border-bottom::after { border-bottom-width: 2px; }
+.cage-border-left::after { border-left-width: 2px; }
+.cage-border-right::after { border-right-width: 2px; }
 
 .cage-sum {
     position: absolute;

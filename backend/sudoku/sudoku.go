@@ -186,10 +186,31 @@ func GenerateKiller(difficulty string, size int) Puzzle {
 	// Generate Cages
 	cages := gen.generateCages(solution)
 
-	// Create empty board (all zeros) for Killer Sudoku
+	// Determine starting board based on difficulty
 	board := make(Grid, gen.N)
-	for i := range board {
-		board[i] = make([]int, gen.N)
+	if difficulty == "hard" {
+		// Hard Killer Sudoku is typically empty
+		for i := range board {
+			board[i] = make([]int, gen.N)
+		}
+	} else {
+		// Easy/Medium should have some given digits
+		for i := range solution {
+			board[i] = make([]int, gen.N)
+			copy(board[i], solution[i])
+		}
+
+		var holes int
+		// Adjust holes logic for Killer Sudoku:
+		// Easy Killer -> Standard Medium (50 holes / 31 clues)
+		// Medium Killer -> Standard Hard (64 holes / 17 clues)
+		if difficulty == "easy" {
+			holes = gen.getHolesCount("medium")
+		} else {
+			holes = gen.getHolesCount("hard")
+		}
+
+		gen.removeDigits(board, holes)
 	}
 
 	return Puzzle{
