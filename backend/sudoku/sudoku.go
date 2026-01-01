@@ -28,6 +28,7 @@ type Generator struct {
 	N         int
 	BoxHeight int
 	BoxWidth  int
+	Cages     []Cage
 }
 
 func init() {
@@ -183,34 +184,69 @@ func GenerateKiller(difficulty string, size int) Puzzle {
 		}
 	}
 
-	// Generate Cages
-	cages := gen.generateCages(solution)
+	// Generate Cages and ensure uniqueness
+	var cages []Cage
+	var board Grid
 
-	// Determine starting board based on difficulty
-	board := make(Grid, gen.N)
-	if difficulty == "hard" {
-		// Hard Killer Sudoku is typically empty
-		for i := range board {
-			board[i] = make([]int, gen.N)
-		}
-	} else {
-		// Easy/Medium should have some given digits
-		for i := range solution {
-			board[i] = make([]int, gen.N)
-			copy(board[i], solution[i])
-		}
+	// Retry loop for unique solution
+	maxRetries := 50
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		cages = gen.generateCages(solution)
+		gen.Cages = cages // Set cages for solver
 
-		var holes int
-		// Adjust holes logic for Killer Sudoku:
-		// Easy Killer -> Standard Medium (50 holes / 31 clues)
-		// Medium Killer -> Standard Hard (64 holes / 17 clues)
-		if difficulty == "easy" {
-			holes = gen.getHolesCount("medium")
+		// Check uniqueness for "Hard" (empty board)
+		if difficulty == "hard" {
+			emptyBoard := make(Grid, gen.N)
+			for i := range emptyBoard {
+				emptyBoard[i] = make([]int, gen.N)
+			}
+
+			solutions := 0
+			gen.solveCountKiller(emptyBoard, &solutions)
+
+			if solutions == 1 {
+				board = emptyBoard
+				break
+			}
+			// If not unique, try generating new cages
+			continue
 		} else {
-			holes = gen.getHolesCount("hard")
-		}
+			// For Easy/Medium, we start with full solution and remove digits
+			// but we check uniqueness using Killer constraints
+			board = make(Grid, gen.N)
+			for i := range solution {
+				board[i] = make([]int, gen.N)
+				copy(board[i], solution[i])
+			}
 
-		gen.removeDigits(board, holes)
+			var holes int
+			if difficulty == "easy" {
+				holes = gen.getHolesCount("medium")
+			} else {
+				holes = gen.getHolesCount("hard")
+			}
+
+			// Use removeDigitsKiller which respects cages
+			gen.removeDigitsKiller(board, holes)
+
+			// For Easy/Medium, we are guaranteed a unique solution by removeDigitsKiller logic
+			break
+		}
+	}
+
+	// Fallback if loop finishes without success (should be rare with 50 retries)
+	if board == nil {
+		// Should not happen, but return generated one anyway
+		board = make(Grid, gen.N)
+		if difficulty == "hard" {
+			// empty
+		} else {
+			// full
+			for i := range solution {
+				board[i] = make([]int, gen.N)
+				copy(board[i], solution[i])
+			}
+		}
 	}
 
 	return Puzzle{
@@ -222,19 +258,40 @@ func GenerateKiller(difficulty string, size int) Puzzle {
 }
 
 func (gen *Generator) generateCages(solution Grid) []Cage {
-	visited := make([][]bool, gen.N)
-	for i := range visited {
-		visited[i] = make([]bool, gen.N)
+	// Retry cage generation a few times if we get stuck (rare but possible)
+	for attempt := 0; attempt < 10; attempt++ {
+		visited := make([][]bool, gen.N)
+		for i := range visited {
+			visited[i] = make([]bool, gen.N)
+		}
+
+		var cages []Cage
+		success := true
+
+		for i := 0; i < gen.N; i++ {
+			for j := 0; j < gen.N; j++ {
+				if !visited[i][j] {
+					cage := gen.growCage(solution, visited, i, j)
+					if len(cage.Cells) == 0 {
+						success = false
+						break
+					}
+					cages = append(cages, cage)
+				}
+			}
+			if !success {
+				break
+			}
+		}
+		if success {
+			return cages
+		}
 	}
-
+	// Fallback: simple 1-cell cages if generation fails (should happen very rarely)
 	var cages []Cage
-
 	for i := 0; i < gen.N; i++ {
 		for j := 0; j < gen.N; j++ {
-			if !visited[i][j] {
-				cage := gen.growCage(solution, visited, i, j)
-				cages = append(cages, cage)
-			}
+			cages = append(cages, Cage{Sum: solution[i][j], Cells: []Point{{i, j}}})
 		}
 	}
 	return cages
@@ -420,6 +477,42 @@ func (gen *Generator) removeDigits(g Grid, k int) {
 	}
 }
 
+func (gen *Generator) removeDigitsKiller(g Grid, k int) {
+	type point struct{ r, c int }
+	cells := make([]point, 0, gen.N*gen.N)
+	for i := 0; i < gen.N; i++ {
+		for j := 0; j < gen.N; j++ {
+			cells = append(cells, point{i, j})
+		}
+	}
+
+	rand.Shuffle(len(cells), func(i, j int) {
+		cells[i], cells[j] = cells[j], cells[i]
+	})
+
+	count := k
+	for _, cell := range cells {
+		if count <= 0 {
+			break
+		}
+
+		i, j := cell.r, cell.c
+		if g[i][j] != 0 {
+			backup := g[i][j]
+			g[i][j] = 0
+
+			solutions := 0
+			gen.solveCountKiller(g, &solutions)
+
+			if solutions != 1 {
+				g[i][j] = backup
+			} else {
+				count--
+			}
+		}
+	}
+}
+
 func (gen *Generator) solveCount(g Grid, count *int) {
 	for i := 0; i < gen.N; i++ {
 		for j := 0; j < gen.N; j++ {
@@ -439,4 +532,86 @@ func (gen *Generator) solveCount(g Grid, count *int) {
 		}
 	}
 	*count++
+}
+
+func (gen *Generator) solveCountKiller(g Grid, count *int) {
+	for i := 0; i < gen.N; i++ {
+		for j := 0; j < gen.N; j++ {
+			if g[i][j] == 0 {
+				for num := 1; num <= gen.N; num++ {
+					if gen.isSafeKiller(g, i, j, num) {
+						g[i][j] = num
+						gen.solveCountKiller(g, count)
+						g[i][j] = 0
+						if *count > 1 {
+							return
+						}
+					}
+				}
+				return
+			}
+		}
+	}
+	*count++
+}
+
+func (gen *Generator) isSafeKiller(g Grid, row, col, num int) bool {
+	// 1. Standard Sudoku Checks
+	if !gen.isSafe(g, row, col, num) {
+		return false
+	}
+
+	// 2. Killer Sudoku Checks (Cages)
+	// Find the cage this cell belongs to
+	var currentCage *Cage
+	for i := range gen.Cages {
+		for _, cell := range gen.Cages[i].Cells {
+			if cell.Row == row && cell.Col == col {
+				currentCage = &gen.Cages[i]
+				break
+			}
+		}
+		if currentCage != nil {
+			break
+		}
+	}
+
+	if currentCage == nil {
+		return true // Should not happen if cages cover all cells
+	}
+
+	currentSum := 0
+	filledCount := 0
+
+	for _, cell := range currentCage.Cells {
+		val := g[cell.Row][cell.Col]
+		// If it's the cell we are currently placing (row, col), use 'num'
+		if cell.Row == row && cell.Col == col {
+			val = num
+		}
+
+		if val != 0 {
+			// Check for duplicates in cage
+			if val == num && (cell.Row != row || cell.Col != col) {
+				// We found 'num' elsewhere in the cage
+				return false
+			}
+			currentSum += val
+			filledCount++
+		}
+	}
+
+	// Check if sum exceeded
+	if currentSum > currentCage.Sum {
+		return false
+	}
+
+	// If cage is full, sum must match exactly
+	if filledCount == len(currentCage.Cells) {
+		if currentSum != currentCage.Sum {
+			return false
+		}
+	}
+
+	return true
 }
