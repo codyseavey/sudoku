@@ -5,9 +5,10 @@ const emit = defineEmits(['start-game', 'create-custom'])
 
 const difficulty = ref('medium')
 const size = ref(9)
+const gameType = ref('standard')
 
 const startGame = () => {
-  emit('start-game', { difficulty: difficulty.value, size: size.value })
+  emit('start-game', { difficulty: difficulty.value, size: size.value, gameType: gameType.value })
 }
 </script>
 
@@ -16,6 +17,24 @@ const startGame = () => {
     <div class="card">
         <h2>New Game Settings</h2>
         
+        <div class="setting-group">
+            <label>Game Type:</label>
+            <div class="options">
+                <button
+                    :class="{ active: gameType === 'standard' }"
+                    @click="gameType = 'standard'"
+                >
+                    Standard
+                </button>
+                <button
+                    :class="{ active: gameType === 'killer' }"
+                    @click="gameType = 'killer'"
+                >
+                    Killer Sudoku
+                </button>
+            </div>
+        </div>
+
         <div class="setting-group">
             <label>Grid Size:</label>
             <div class="options">

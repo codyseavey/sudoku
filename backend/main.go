@@ -22,12 +22,19 @@ func main() {
 
 		difficulty := r.URL.Query().Get("difficulty")
 		sizeParam := r.URL.Query().Get("size")
+		gameType := r.URL.Query().Get("gameType")
 		size := 9
 		if sizeParam == "6" {
 			size = 6
 		}
 
-		puzzle := sudoku.Generate(difficulty, size)
+		var puzzle sudoku.Puzzle
+		if gameType == "killer" {
+			puzzle = sudoku.GenerateKiller(difficulty, size)
+		} else {
+			puzzle = sudoku.Generate(difficulty, size)
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(puzzle)
 	})

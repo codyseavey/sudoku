@@ -4,17 +4,17 @@ import SudokuBoard from './components/SudokuBoard.vue'
 import LandingPage from './components/LandingPage.vue'
 
 const gameStarted = ref(false)
-const gameSettings = ref({ difficulty: 'medium', size: 9, isCustomMode: false })
+const gameSettings = ref({ difficulty: 'medium', size: 9, isCustomMode: false, gameType: 'standard' })
 const importedPuzzle = ref<Record<string, any> | undefined>(undefined)
 
-const onStartGame = (settings: { difficulty: string, size: number }) => {
-    gameSettings.value = { ...settings, isCustomMode: false }
+const onStartGame = (settings: { difficulty: string, size: number, gameType?: string }) => {
+    gameSettings.value = { ...settings, isCustomMode: false, gameType: settings.gameType || 'standard' }
     importedPuzzle.value = undefined
     gameStarted.value = true
 }
 
 const onCreateCustom = (settings: { size: number }) => {
-    gameSettings.value = { difficulty: 'custom', size: settings.size, isCustomMode: true }
+    gameSettings.value = { difficulty: 'custom', size: settings.size, isCustomMode: true, gameType: 'standard' }
     importedPuzzle.value = undefined
     gameStarted.value = true
 }
@@ -45,7 +45,8 @@ onMounted(() => {
                 gameSettings.value = { 
                     difficulty: decoded.difficulty || 'imported', 
                     size: decoded.size || 9,
-                    isCustomMode: false
+                    isCustomMode: false,
+                    gameType: 'standard'
                 }
                 importedPuzzle.value = decoded
                 gameStarted.value = true
@@ -68,7 +69,8 @@ onMounted(() => {
                 gameSettings.value = { 
                     difficulty: state.difficulty || 'medium', 
                     size: 9,
-                    isCustomMode: state.isCustomMode || false
+                    isCustomMode: state.isCustomMode || false,
+                    gameType: state.gameType || 'standard'
                 }
                 gameStarted.value = true
                 return
@@ -83,7 +85,8 @@ onMounted(() => {
                 gameSettings.value = { 
                     difficulty: state.difficulty || 'medium', 
                     size: 6,
-                    isCustomMode: state.isCustomMode || false
+                    isCustomMode: state.isCustomMode || false,
+                    gameType: state.gameType || 'standard'
                 }
                 gameStarted.value = true
                 return
@@ -102,6 +105,7 @@ onMounted(() => {
         :initialDifficulty="gameSettings.difficulty" 
         :size="gameSettings.size"
         :isCustomMode="gameSettings.isCustomMode"
+        :gameType="gameSettings.gameType"
         :initialPuzzle="importedPuzzle"
         @back-to-menu="onBackToMenu"
     />

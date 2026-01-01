@@ -7,9 +7,21 @@ import (
 
 type Grid [][]int
 
+type Point struct {
+	Row int `json:"row"`
+	Col int `json:"col"`
+}
+
+type Cage struct {
+	Sum   int     `json:"sum"`
+	Cells []Point `json:"cells"`
+}
+
 type Puzzle struct {
-	Solution Grid `json:"solution"`
-	Board    Grid `json:"board"`
+	Solution Grid   `json:"solution"`
+	Board    Grid   `json:"board"`
+	Cages    []Cage `json:"cages,omitempty"`
+	GameType string `json:"gameType,omitempty"`
 }
 
 type Generator struct {
@@ -142,6 +154,133 @@ func Generate(difficulty string, size int) Puzzle {
 		Solution: solution,
 		Board:    puzzleBoard,
 	}
+}
+
+// GenerateKiller creates a new valid Killer Sudoku puzzle
+func GenerateKiller(difficulty string, size int) Puzzle {
+	gen := Generator{N: size}
+
+	// Configure dimensions
+	if size == 6 {
+		gen.BoxHeight = 2
+		gen.BoxWidth = 3
+	} else {
+		// Default to 9x9
+		gen.N = 9
+		gen.BoxHeight = 3
+		gen.BoxWidth = 3
+	}
+
+	var solution Grid
+	// Retry generation until a valid solution is found
+	for {
+		solution = make(Grid, gen.N)
+		for i := range solution {
+			solution[i] = make([]int, gen.N)
+		}
+		if gen.fillGrid(solution) {
+			break
+		}
+	}
+
+	// Generate Cages
+	cages := gen.generateCages(solution)
+
+	// Create empty board (all zeros) for Killer Sudoku
+	board := make(Grid, gen.N)
+	for i := range board {
+		board[i] = make([]int, gen.N)
+	}
+
+	return Puzzle{
+		Solution: solution,
+		Board:    board,
+		Cages:    cages,
+		GameType: "killer",
+	}
+}
+
+func (gen *Generator) generateCages(solution Grid) []Cage {
+	visited := make([][]bool, gen.N)
+	for i := range visited {
+		visited[i] = make([]bool, gen.N)
+	}
+
+	var cages []Cage
+
+	for i := 0; i < gen.N; i++ {
+		for j := 0; j < gen.N; j++ {
+			if !visited[i][j] {
+				cage := gen.growCage(solution, visited, i, j)
+				cages = append(cages, cage)
+			}
+		}
+	}
+	return cages
+}
+
+func (gen *Generator) growCage(solution Grid, visited [][]bool, r, c int) Cage {
+	// Initialize cage with starting cell
+	cells := []Point{{r, c}}
+	visited[r][c] = true
+	values := make(map[int]bool)
+	values[solution[r][c]] = true
+
+	// Determine random target size (e.g., 2 to 5)
+	targetSize := rand.Intn(4) + 2
+	if gen.N == 6 {
+		targetSize = rand.Intn(3) + 2
+	}
+
+	// Directions: up, down, left, right
+	dirs := []Point{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
+
+	for len(cells) < targetSize {
+		// Pick a random cell from current cage to expand from
+		perm := rand.Perm(len(cells))
+		expanded := false
+
+		for _, idx := range perm {
+			curr := cells[idx]
+
+			// Shuffle directions
+			dirPerm := rand.Perm(4)
+			for _, dIdx := range dirPerm {
+				d := dirs[dIdx]
+				nr, nc := curr.Row+d.Row, curr.Col+d.Col
+
+				// Check bounds
+				if nr >= 0 && nr < gen.N && nc >= 0 && nc < gen.N {
+					if !visited[nr][nc] {
+						val := solution[nr][nc]
+						if !values[val] {
+							// Add to cage
+							visited[nr][nc] = true
+							cells = append(cells, Point{nr, nc})
+							values[val] = true
+							expanded = true
+							break
+						}
+					}
+				}
+			}
+			if expanded {
+				break
+			}
+		}
+
+		if !expanded {
+			break
+		}
+	}
+
+	// Calculate Sum
+	sum := 0
+	for _, cell := range cells {
+		sum += solution[cell.Row][cell.Col]
+	}
+
+	return Cage{Sum: sum, Cells: cells}
 }
 
 func (gen *Generator) getHolesCount(difficulty string) int {
