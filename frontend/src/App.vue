@@ -13,8 +13,8 @@ const onStartGame = (settings: { difficulty: string, size: number, gameType?: st
     gameStarted.value = true
 }
 
-const onCreateCustom = (settings: { size: number }) => {
-    gameSettings.value = { difficulty: 'custom', size: settings.size, isCustomMode: true, gameType: 'standard' }
+const onCreateCustom = (settings: { size: number, gameType?: string }) => {
+    gameSettings.value = { difficulty: 'custom', size: settings.size, isCustomMode: true, gameType: settings.gameType || 'standard' }
     importedPuzzle.value = undefined
     gameStarted.value = true
 }

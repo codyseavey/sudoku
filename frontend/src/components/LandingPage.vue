@@ -79,7 +79,7 @@ const startGame = () => {
 
         <div class="buttons">
             <button class="start-btn" @click="startGame">Start Game</button>
-            <button class="custom-btn" @click="emit('create-custom', { size })">Create Custom</button>
+            <button class="custom-btn" @click="emit('create-custom', { size, gameType })">Create Custom</button>
         </div>
     </div>
   </div>
