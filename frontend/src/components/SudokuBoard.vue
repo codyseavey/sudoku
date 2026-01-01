@@ -678,7 +678,7 @@ onUnmounted(() => {
                 </div>
 
                 <!-- Candidates Overlay -->
-                <div v-if="!isDefiningCustom && cell === null && candidates[rIndex]![cIndex]!.length > 0" class="candidates-grid" :class="`size-${size}`">
+                <div v-if="!isDefiningCustom && cell === null && candidates[rIndex]![cIndex]!.length > 0" class="candidates-grid" :class="[`size-${size}`, { 'killer-mode': gameType === 'killer' }]">
                     <div 
                         v-for="num in size"
                         :key="num"
@@ -889,6 +889,7 @@ onUnmounted(() => {
     display: grid;
     pointer-events: none;
     z-index: 5;
+    box-sizing: border-box;
 }
 
 .candidates-grid.size-9 {
@@ -899,6 +900,10 @@ onUnmounted(() => {
 .candidates-grid.size-6 {
     grid-template-columns: repeat(3, 1fr);
     grid-template-rows: repeat(2, 1fr);
+}
+
+.candidates-grid.killer-mode {
+    padding-top: 15px;
 }
 
 .candidate-cell {
