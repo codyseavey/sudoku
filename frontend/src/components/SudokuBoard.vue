@@ -809,10 +809,10 @@ onUnmounted(() => {
 }
 
 /* Killer Sudoku Cage Styling */
-.cage-border-top { border-top: 1px dashed #555 !important; }
-.cage-border-bottom { border-bottom: 1px dashed #555 !important; }
-.cage-border-left { border-left: 1px dashed #555 !important; }
-.cage-border-right { border-right: 1px dashed #555 !important; }
+.cage-border-top { border-top: 2px dotted #333; }
+.cage-border-bottom { border-bottom: 2px dotted #333; }
+.cage-border-left { border-left: 2px dotted #333; }
+.cage-border-right { border-right: 2px dotted #333; }
 
 .cage-sum {
     position: absolute;
