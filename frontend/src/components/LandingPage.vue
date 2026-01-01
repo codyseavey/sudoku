@@ -79,7 +79,14 @@ const startGame = () => {
 
         <div class="buttons">
             <button class="start-btn" @click="startGame">Start Game</button>
-            <button class="custom-btn" @click="emit('create-custom', { size, gameType })">Create Custom</button>
+            <button
+                class="custom-btn"
+                @click="emit('create-custom', { size, gameType })"
+                :disabled="gameType === 'killer'"
+                :title="gameType === 'killer' ? 'Custom game creation is not supported for Killer Sudoku' : ''"
+            >
+                Create Custom
+            </button>
         </div>
     </div>
   </div>
@@ -174,5 +181,12 @@ label {
 }
 .custom-btn:hover {
     background: #d35400;
+}
+.custom-btn:disabled {
+    background: #95a5a6;
+    cursor: not-allowed;
+}
+.custom-btn:disabled:hover {
+    background: #95a5a6;
 }
 </style>
