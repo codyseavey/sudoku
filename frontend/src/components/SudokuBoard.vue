@@ -7,7 +7,8 @@ const props = defineProps<{
     initialPuzzle?: Record<string, any>,
     isCustomMode?: boolean,
     gameType?: string,
-    initialBoardUpload?: number[][]
+    initialBoardUpload?: number[][],
+    initialCages?: { sum: number, cells: { row: number, col: number }[] }[]
 }>()
 
 const emit = defineEmits(['back-to-menu', 'puzzle-completed'])
@@ -33,6 +34,10 @@ const isPaused = ref(false)
 let timerInterval: number | undefined
 const isMobile = ref(false)
 const selectedCell = ref<{r: number, c: number} | null>(null)
+
+// Custom Cage Creation Logic
+const isCageSelectionMode = ref(false)
+const currentCageSelection = ref<Set<string>>(new Set()) // Store as "r,c" strings
 
 const STORAGE_KEY = `sudoku_game_state_${props.size}`
 
@@ -155,6 +160,12 @@ const loadUploadedBoard = (data: number[][]) => {
     solution.value = [] // Not solved yet
     initialBoardState.value = []
     isDefiningCustom.value = true
+
+    if (props.initialCages) {
+        cages.value = props.initialCages
+    } else {
+        cages.value = []
+    }
 
     resetCandidates()
     history.value = []
@@ -539,7 +550,63 @@ const handleKeydown = (e: KeyboardEvent, r: number, c: number) => {
 }
 
 const onFocus = (r: number, c: number) => {
+    if (isCageSelectionMode.value) return // Don't focus if selecting cages
     selectedCell.value = { r, c }
+}
+
+const toggleCageSelectionMode = () => {
+    isCageSelectionMode.value = !isCageSelectionMode.value
+    currentCageSelection.value.clear()
+    selectedCell.value = null
+}
+
+const onCellClickInCageMode = (r: number, c: number) => {
+    if (!isCageSelectionMode.value) return
+    const key = `${r},${c}`
+    if (currentCageSelection.value.has(key)) {
+        currentCageSelection.value.delete(key)
+    } else {
+        currentCageSelection.value.add(key)
+    }
+}
+
+const saveCage = () => {
+    if (currentCageSelection.value.size === 0) return
+
+    const sumStr = prompt("Enter sum for this cage:")
+    if (!sumStr) return
+
+    const sum = parseInt(sumStr)
+    if (isNaN(sum)) {
+        alert("Invalid sum")
+        return
+    }
+
+    const newCageCells: { row: number, col: number }[] = []
+    currentCageSelection.value.forEach(key => {
+        const [r, c] = key.split(',').map(Number)
+        newCageCells.push({ row: r, col: c })
+    })
+
+    cages.value.push({ sum, cells: newCageCells })
+    currentCageSelection.value.clear()
+    isCageSelectionMode.value = false
+}
+
+const cancelCageSelection = () => {
+    currentCageSelection.value.clear()
+    isCageSelectionMode.value = false
+}
+
+const deleteCage = () => {
+    if (!selectedCell.value) return
+    const { r, c } = selectedCell.value
+    const idx = cages.value.findIndex(cg => cg.cells.some(cell => cell.row === r && cell.col === c))
+    if (idx > -1) {
+        if (confirm(`Delete cage with sum ${cages.value[idx].sum}?`)) {
+            cages.value.splice(idx, 1)
+        }
+    }
 }
 
 const setCellValue = (r: number, c: number, num: number) => {
@@ -752,14 +819,23 @@ onUnmounted(() => {
                 <button class="primary-action" @click="resumeTimer">Resume</button>
             </div>
         <div v-for="(row, rIndex) in board" :key="rIndex" class="row">
-            <div v-for="(cell, cIndex) in row" :key="cIndex" class="cell" :class="getCageStyle(rIndex, cIndex)">
+            <div
+                v-for="(cell, cIndex) in row"
+                :key="cIndex"
+                class="cell"
+                :class="[
+                    getCageStyle(rIndex, cIndex),
+                    { 'cage-selected': currentCageSelection.has(`${rIndex},${cIndex}`) }
+                ]"
+                @click="onCellClickInCageMode(rIndex, cIndex)"
+            >
                 <div v-if="getCageSum(rIndex, cIndex)" class="cage-sum">{{ getCageSum(rIndex, cIndex) }}</div>
                 <!-- Main Value Input -->
                 <input 
                     type="text"
                     inputmode="numeric"
                     :value="cell"
-                    :readonly="isMobile"
+                    :readonly="isMobile || isCageSelectionMode"
                     @focus="onFocus(rIndex, cIndex)"
                     @keydown="handleKeydown($event, rIndex, cIndex)"
                     @input="handleInput($event, rIndex, cIndex)"
@@ -767,7 +843,8 @@ onUnmounted(() => {
                     class="value-input"
                     :class="{
                         'hidden': cell === null,
-                        'fixed': isFixed[rIndex]![cIndex] || isDefiningCustom 
+                        'fixed': isFixed[rIndex]![cIndex] || isDefiningCustom,
+                        'pointer-events-none': isCageSelectionMode
                     }"
                 />
                 
@@ -808,7 +885,17 @@ onUnmounted(() => {
             <!-- Custom Mode Setup Controls -->
             <div class="controls" v-if="isDefiningCustom">
                 <button @click="startNewGame">Cancel</button>
-                <button class="primary-action" @click="validateAndStartCustom">Start Solving</button>
+                <div v-if="gameType === 'killer'" class="killer-controls">
+                     <button v-if="!isCageSelectionMode" @click="toggleCageSelectionMode">Add Cage</button>
+                     <button v-if="!isCageSelectionMode && selectedCell && cages.some(c => c.cells.some(cl => cl.row === selectedCell!.r && cl.col === selectedCell!.c))" @click="deleteCage" class="delete-btn">Delete Cage</button>
+
+                     <div v-if="isCageSelectionMode" class="cage-actions">
+                        <span class="instruction">Select cells...</span>
+                        <button @click="saveCage" class="primary-action" :disabled="currentCageSelection.size === 0">Save Cage</button>
+                        <button @click="cancelCageSelection">Cancel Selection</button>
+                     </div>
+                </div>
+                <button v-if="!isCageSelectionMode" class="primary-action" @click="validateAndStartCustom">Start Solving</button>
             </div>
 
             <!-- Normal Game Controls -->
@@ -1148,5 +1235,38 @@ button.active {
     background-color: #ffcccc;
     color: #cc0000;
     grid-column: span 1;
+}
+
+.cage-selected {
+    background-color: rgba(255, 235, 59, 0.5) !important;
+}
+
+.pointer-events-none {
+    pointer-events: none;
+}
+
+.killer-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.cage-actions {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+
+.instruction {
+    font-size: 0.9rem;
+    color: #dad4f6;
+}
+
+.delete-btn {
+    background-color: #e74c3c;
+}
+.delete-btn:hover {
+    background-color: #c0392b;
 }
 </style>

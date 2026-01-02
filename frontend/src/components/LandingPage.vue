@@ -31,6 +31,7 @@ const handleFileUpload = async (event: Event) => {
 
     const formData = new FormData()
     formData.append('image', file)
+    formData.append('gameType', gameType.value)
 
     try {
         const response = await fetch('/api/upload', {
@@ -49,10 +50,14 @@ const handleFileUpload = async (event: Event) => {
             // For now, assume 9x9 as that's what backend returns currently
             // Ideally we should detect size or enforce 9x9.
             // But let's just pass it.
-            emit('create-custom', { size: 9, gameType: 'standard', initialBoard: data.board })
+            emit('create-custom', {
+                size: 9,
+                gameType: gameType.value,
+                initialBoard: data.board,
+                initialCages: data.cages
+            })
             // Reset selection to standard/9 just in case
             size.value = 9
-            gameType.value = 'standard'
         }
     } catch (e: any) {
         console.error("Upload error:", e)
@@ -135,8 +140,6 @@ const handleFileUpload = async (event: Event) => {
             <button
                 class="custom-btn"
                 @click="emit('create-custom', { size, gameType })"
-                :disabled="gameType === 'killer'"
-                :title="gameType === 'killer' ? 'Custom game creation is not supported for Killer Sudoku' : ''"
             >
                 Create Custom
             </button>
@@ -153,7 +156,7 @@ const handleFileUpload = async (event: Event) => {
             <button
                 class="upload-btn"
                 @click="triggerUpload"
-                :disabled="gameType === 'killer' || isLoading"
+                :disabled="isLoading"
             >
                 {{ isLoading ? 'Processing...' : 'Upload Puzzle from Image' }}
             </button>
