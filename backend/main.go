@@ -6,9 +6,17 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 
 	"github.com/codyseavey/sudoku/backend/sudoku"
 )
+
+type Stats struct {
+	TotalSolved int `json:"totalSolved"`
+	mu          sync.Mutex
+}
+
+var stats Stats
 
 func main() {
 	mux := http.NewServeMux()
@@ -28,6 +36,8 @@ func main() {
 			size = 6
 		}
 
+		log.Printf("Generating puzzle: difficulty=%s, size=%d, type=%s", difficulty, size, gameType)
+
 		var puzzle sudoku.Puzzle
 		if gameType == "killer" {
 			puzzle = sudoku.GenerateKiller(difficulty, size)
@@ -37,6 +47,48 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(puzzle)
+	})
+
+	// API Endpoint: Complete
+	mux.HandleFunc("/api/complete", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Difficulty string `json:"difficulty"`
+			GameType   string `json:"gameType"`
+			Size       int    `json:"size"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			// Just log error but don't fail hard if we can't parse details, we still want to count it?
+			// Actually, let's just log "Unknown puzzle" if decode fails or proceed.
+			log.Printf("Failed to decode completion request: %v", err)
+		}
+
+		log.Printf("Puzzle Completed: difficulty=%s, size=%d, type=%s", req.Difficulty, req.Size, req.GameType)
+
+		stats.mu.Lock()
+		stats.TotalSolved++
+		stats.mu.Unlock()
+
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// API Endpoint: Stats
+	mux.HandleFunc("/api/stats", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		stats.mu.Lock()
+		defer stats.mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(stats)
 	})
 
 	// API Endpoint: Solve

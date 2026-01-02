@@ -9,7 +9,7 @@ const props = defineProps<{
     gameType?: string
 }>()
 
-const emit = defineEmits(['back-to-menu'])
+const emit = defineEmits(['back-to-menu', 'puzzle-completed'])
 
 // Use null for empty cells instead of 0
 const board = ref<(number | null)[][]>([])
@@ -435,6 +435,20 @@ const checkSolution = () => {
     // If we passed all checks
     message.value = 'Correct! Well done.'
     stopTimer()
+
+    // Send completion to backend
+    fetch('/api/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            difficulty: props.initialDifficulty,
+            size: props.size,
+            gameType: props.gameType || 'standard'
+        })
+    }).catch(e => console.error("Failed to report completion", e))
+
+    // Notify parent
+    emit('puzzle-completed', { board: board.value })
 }
 
 const isBoardFull = () => {

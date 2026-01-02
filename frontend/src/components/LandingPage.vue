@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-const emit = defineEmits(['start-game', 'create-custom'])
+const emit = defineEmits(['start-game', 'create-custom', 'view-stats'])
 
 const difficulty = ref('medium')
 const size = ref(9)
@@ -88,6 +88,8 @@ const startGame = () => {
                 Create Custom
             </button>
         </div>
+
+        <button class="stats-btn" @click="emit('view-stats')">View Global Stats</button>
     </div>
   </div>
 </template>
@@ -188,5 +190,21 @@ label {
 }
 .custom-btn:disabled:hover {
     background: #95a5a6;
+}
+
+.stats-btn {
+    margin-top: 1rem;
+    padding: 0.8rem;
+    background: transparent;
+    color: #34495e;
+    border: 1px solid #34495e;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    width: 100%;
+}
+
+.stats-btn:hover {
+    background: #f0f0f0;
 }
 </style>
