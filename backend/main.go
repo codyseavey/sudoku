@@ -215,7 +215,8 @@ func main() {
 			return
 		}
 
-		board, err := sudoku.ExtractSudokuFromImage(fileBytes)
+		gameType := r.FormValue("gameType")
+		puzzle, err := sudoku.ExtractSudokuFromImage(fileBytes, gameType)
 		if err != nil {
 			log.Printf("Gemini Error: %v", err)
 			http.Error(w, "Failed to process image: "+err.Error(), http.StatusInternalServerError)
@@ -223,11 +224,7 @@ func main() {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(struct {
-			Board [][]int `json:"board"`
-		}{
-			Board: board,
-		})
+		json.NewEncoder(w).Encode(puzzle)
 	})
 
 	// Static File Serving
