@@ -191,6 +191,44 @@ func main() {
 		})
 	})
 
+	// API Endpoint: Upload Image
+	mux.HandleFunc("/api/upload", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Limit upload size
+		r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10 MB
+
+		file, _, err := r.FormFile("image")
+		if err != nil {
+			http.Error(w, "Invalid file", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		fileBytes, err := io.ReadAll(file)
+		if err != nil {
+			http.Error(w, "Error reading file", http.StatusInternalServerError)
+			return
+		}
+
+		board, err := sudoku.ExtractSudokuFromImage(fileBytes)
+		if err != nil {
+			log.Printf("Gemini Error: %v", err)
+			http.Error(w, "Failed to process image: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(struct {
+			Board [][]int `json:"board"`
+		}{
+			Board: board,
+		})
+	})
+
 	// Static File Serving
 	// Check for "dist" (production) first, then fallback to "../frontend/dist" (local dev)
 	frontendDir := "dist"
