@@ -53,6 +53,7 @@ func saveStats() {
 }
 
 func main() {
+	log.Println("Starting Sudoku Server v1.1 (Stats V3)")
 	loadStats()
 	if stats.Details == nil {
 		stats.Details = make(map[string]map[string]map[string]int)
