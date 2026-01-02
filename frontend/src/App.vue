@@ -2,21 +2,26 @@
 import { ref, onMounted } from 'vue'
 import SudokuBoard from './components/SudokuBoard.vue'
 import LandingPage from './components/LandingPage.vue'
+import StatsPage from './components/StatsPage.vue'
+import PuzzleSolved from './components/PuzzleSolved.vue'
 
-const gameStarted = ref(false)
+type ViewState = 'landing' | 'game' | 'stats' | 'solved'
+const currentView = ref<ViewState>('landing')
+const solvedBoard = ref<(number | null)[][]>([])
+
 const gameSettings = ref({ difficulty: 'medium', size: 9, isCustomMode: false, gameType: 'standard' })
 const importedPuzzle = ref<Record<string, any> | undefined>(undefined)
 
 const onStartGame = (settings: { difficulty: string, size: number, gameType?: string }) => {
     gameSettings.value = { ...settings, isCustomMode: false, gameType: settings.gameType || 'standard' }
     importedPuzzle.value = undefined
-    gameStarted.value = true
+    currentView.value = 'game'
 }
 
 const onCreateCustom = (settings: { size: number, gameType?: string }) => {
     gameSettings.value = { difficulty: 'custom', size: settings.size, isCustomMode: true, gameType: settings.gameType || 'standard' }
     importedPuzzle.value = undefined
-    gameStarted.value = true
+    currentView.value = 'game'
 }
 
 const onBackToMenu = () => {
@@ -29,8 +34,20 @@ const onBackToMenu = () => {
     // Clear URL params
     window.history.replaceState({}, document.title, "/")
     
-    gameStarted.value = false
+    currentView.value = 'landing'
     importedPuzzle.value = undefined
+}
+
+const onViewStats = () => {
+    currentView.value = 'stats'
+}
+
+const onPuzzleCompleted = (data: { board: (number | null)[][] }) => {
+    solvedBoard.value = data.board
+    currentView.value = 'solved'
+
+    // Clear saved game since it is solved
+    localStorage.removeItem(`sudoku_game_state_${gameSettings.value.size}`)
 }
 
 onMounted(() => {
@@ -49,7 +66,7 @@ onMounted(() => {
                     gameType: 'standard'
                 }
                 importedPuzzle.value = decoded
-                gameStarted.value = true
+                currentView.value = 'game'
                 return
             }
         } catch (e) {
@@ -72,7 +89,7 @@ onMounted(() => {
                     isCustomMode: state.isCustomMode || false,
                     gameType: state.gameType || 'standard'
                 }
-                gameStarted.value = true
+                currentView.value = 'game'
                 return
             }
         } catch (e) {}
@@ -88,7 +105,7 @@ onMounted(() => {
                     isCustomMode: state.isCustomMode || false,
                     gameType: state.gameType || 'standard'
                 }
-                gameStarted.value = true
+                currentView.value = 'game'
                 return
             }
         } catch (e) {}
@@ -98,16 +115,39 @@ onMounted(() => {
 
 <template>
   <div class="container">
-    <h1 v-if="!gameStarted">Sudoku</h1>
-    <LandingPage v-if="!gameStarted" @start-game="onStartGame" @create-custom="onCreateCustom" />
+    <h1 v-if="currentView === 'landing'">Sudoku</h1>
+
+    <LandingPage
+        v-if="currentView === 'landing'"
+        @start-game="onStartGame"
+        @create-custom="onCreateCustom"
+        @view-stats="onViewStats"
+    />
+
+    <StatsPage
+        v-else-if="currentView === 'stats'"
+        @back-to-menu="onBackToMenu"
+    />
+
+    <PuzzleSolved
+        v-else-if="currentView === 'solved'"
+        :board="solvedBoard"
+        :difficulty="gameSettings.difficulty"
+        :size="gameSettings.size"
+        :gameType="gameSettings.gameType"
+        @back-to-menu="onBackToMenu"
+        @new-game="onStartGame(gameSettings)"
+    />
+
     <SudokuBoard 
-        v-else 
+        v-else-if="currentView === 'game'"
         :initialDifficulty="gameSettings.difficulty" 
         :size="gameSettings.size"
         :isCustomMode="gameSettings.isCustomMode"
         :gameType="gameSettings.gameType"
         :initialPuzzle="importedPuzzle"
         @back-to-menu="onBackToMenu"
+        @puzzle-completed="onPuzzleCompleted"
     />
   </div>
 </template>
