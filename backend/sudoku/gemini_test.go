@@ -46,7 +46,47 @@ func TestParseGeminiResponse(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "Killer Sudoku with Cages",
+			name: "Killer Sudoku with Cage Map",
+			responseText: `{
+				"board": [
+					[0, 0, 0, 0, 0, 0, 0, 0, 0],
+					[0, 0, 0, 0, 0, 0, 0, 0, 0],
+					[0, 0, 0, 0, 0, 0, 0, 0, 0],
+					[0, 0, 0, 0, 0, 0, 0, 0, 0],
+					[0, 0, 0, 0, 0, 0, 0, 0, 0],
+					[0, 0, 0, 0, 0, 0, 0, 0, 0],
+					[0, 0, 0, 0, 0, 0, 0, 0, 0],
+					[0, 0, 0, 0, 0, 0, 0, 0, 0],
+					[0, 0, 0, 0, 0, 0, 0, 0, 0]
+				],
+				"cage_map": [
+					["A", "A", "B", "B", "C", "C", "D", "D", "D"],
+					["E", "E", "F", "F", "G", "G", "H", "H", "H"],
+					["I", "I", "J", "J", "K", "K", "L", "L", "L"],
+					["M", "M", "N", "N", "O", "O", "P", "P", "P"],
+					["Q", "Q", "R", "R", "S", "S", "T", "T", "T"],
+					["U", "U", "V", "V", "W", "W", "X", "X", "X"],
+					["Y", "Y", "Z", "Z", "1", "1", "2", "2", "2"],
+					["3", "3", "4", "4", "5", "5", "6", "6", "6"],
+					["7", "7", "8", "8", "9", "9", "0", "0", "0"]
+				],
+				"cage_sums": {
+					"A": 10, "B": 20
+				}
+			}`,
+			gameType: "killer",
+			wantPuzzle: Puzzle{
+				Board: make(Grid, 9),
+				Cages: []Cage{
+					{Sum: 10, Cells: []Point{{Row: 0, Col: 0}, {Row: 0, Col: 1}}},
+					{Sum: 20, Cells: []Point{{Row: 0, Col: 2}, {Row: 0, Col: 3}}},
+				},
+				GameType: "killer",
+			},
+			wantErr: false,
+		},
+		{
+			name: "Killer Sudoku with Legacy Cages",
 			responseText: `{
 				"board": [
 					[0, 0, 0, 0, 0, 0, 0, 0, 0],
