@@ -49,3 +49,4 @@ backend/sudoku-server
 
 # Go workspace
 go.work
+server_log.txt
