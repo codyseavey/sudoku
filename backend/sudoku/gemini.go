@@ -99,8 +99,8 @@ Rules:
 		return emptyPuzzle, err
 	}
 
-	// Use gemini-1.5-flash for image understanding (balanced for speed and capability)
-	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey
+	// Use gemini-3.0-pro-image for image understanding
+	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro-image:generateContent?key=" + apiKey
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return emptyPuzzle, err
