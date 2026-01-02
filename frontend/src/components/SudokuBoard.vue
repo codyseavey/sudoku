@@ -30,6 +30,8 @@ const isDefiningCustom = ref(false) // State for entering custom puzzle
 const timer = ref(0)
 const isPaused = ref(false)
 let timerInterval: number | undefined
+const isMobile = ref(false)
+const selectedCell = ref<{r: number, c: number} | null>(null)
 
 const STORAGE_KEY = `sudoku_game_state_${props.size}`
 
@@ -499,6 +501,67 @@ const handleKeydown = (e: KeyboardEvent, r: number, c: number) => {
     }
 }
 
+const onFocus = (r: number, c: number) => {
+    selectedCell.value = { r, c }
+}
+
+const setCellValue = (r: number, c: number, num: number) => {
+    // In custom definition mode, we don't check isFixed (everything is editable initially)
+    // Once game starts, we check isFixed.
+    if (!isDefiningCustom.value && isFixed.value[r]?.[c]) return
+
+    saveState()
+
+    // Logic for Custom Definition Mode
+    if (isDefiningCustom.value) {
+        if (board.value[r]) board.value[r]![c] = num
+        return
+    }
+
+    // Logic for Normal Play Mode
+    if (isNoteMode.value) {
+        const currentCandidates = candidates.value[r]?.[c]
+        if (!currentCandidates) return
+        const idx = currentCandidates.indexOf(num)
+        if (idx > -1) {
+            currentCandidates.splice(idx, 1)
+            eliminatedCandidates.value[r]![c]!.add(num)
+        } else {
+            currentCandidates.push(num)
+            currentCandidates.sort()
+            eliminatedCandidates.value[r]![c]!.delete(num)
+        }
+    } else {
+        if (board.value[r]) board.value[r]![c] = num
+        if (candidates.value[r]) candidates.value[r]![c] = []
+
+        // Auto Eliminate Peer Candidates (Always ON)
+        if (num !== undefined && num === solution.value[r]![c]) {
+            removeCandidates(r, c, num)
+        }
+
+        // Auto Check if full
+        if (isBoardFull()) {
+            checkSolution()
+        }
+    }
+}
+
+const onPadInput = (num: number) => {
+    if (!selectedCell.value) return
+    const { r, c } = selectedCell.value
+    setCellValue(r, c, num)
+}
+
+const onPadClear = () => {
+    if (!selectedCell.value) return
+    const { r, c } = selectedCell.value
+    if (!isFixed.value[r]![c] && board.value[r]![c] !== null) {
+        saveState() // Save before clearing
+        board.value[r]![c] = null
+    }
+}
+
 const handleInput = (e: Event, r: number, c: number) => {
     const input = e.target as HTMLInputElement
     const val = input.value
@@ -515,46 +578,7 @@ const handleInput = (e: Event, r: number, c: number) => {
 
     if (regex.test(char)) {
         const num = parseInt(char)
-        
-        // In custom definition mode, we don't check isFixed (everything is editable initially)
-        // Once game starts, we check isFixed.
-        if (!isDefiningCustom.value && isFixed.value[r]?.[c]) return
-
-        saveState()
-
-        // Logic for Custom Definition Mode
-        if (isDefiningCustom.value) {
-            if (board.value[r]) board.value[r]![c] = num
-            return
-        }
-
-        // Logic for Normal Play Mode
-        if (isNoteMode.value) {
-            const currentCandidates = candidates.value[r]?.[c]
-            if (!currentCandidates) return
-            const idx = currentCandidates.indexOf(num)
-            if (idx > -1) {
-                currentCandidates.splice(idx, 1)
-                eliminatedCandidates.value[r]![c]!.add(num)
-            } else {
-                currentCandidates.push(num)
-                currentCandidates.sort()
-                eliminatedCandidates.value[r]![c]!.delete(num)
-            }
-        } else {
-            if (board.value[r]) board.value[r]![c] = num
-            if (candidates.value[r]) candidates.value[r]![c] = []
-            
-            // Auto Eliminate Peer Candidates (Always ON)
-            if (num !== undefined && num === solution.value[r]![c]) {
-                removeCandidates(r, c, num)
-            }
-
-            // Auto Check if full
-            if (isBoardFull()) {
-                checkSolution()
-            }
-        }
+        setCellValue(r, c, num)
     }
 }
 
@@ -647,7 +671,13 @@ const getCageSum = (r: number, c: number) => {
     return null
 }
 
+const updateMobileState = () => {
+    isMobile.value = window.innerWidth < 768
+}
+
 onMounted(() => {
+    updateMobileState()
+    window.addEventListener('resize', updateMobileState)
     initArrays()
     if (loadGame()) {
         // Resume timer if game loaded and not defining custom
@@ -660,6 +690,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+    window.removeEventListener('resize', updateMobileState)
     stopTimer()
 })
 </script>
@@ -691,6 +722,8 @@ onUnmounted(() => {
                     type="text"
                     inputmode="numeric"
                     :value="cell"
+                    :readonly="isMobile"
+                    @focus="onFocus(rIndex, cIndex)"
                     @keydown="handleKeydown($event, rIndex, cIndex)"
                     @input="handleInput($event, rIndex, cIndex)"
                     autocomplete="off"
@@ -721,6 +754,20 @@ onUnmounted(() => {
         </div>
 
         <div class="controls-container">
+            <!-- Mobile Number Pad -->
+            <div class="number-pad" v-if="isMobile">
+                <button
+                    v-for="n in 9"
+                    :key="n"
+                    class="pad-btn"
+                    @mousedown.prevent
+                    @click="onPadInput(n)"
+                >
+                    {{ n }}
+                </button>
+                <button class="pad-btn clear-btn" @mousedown.prevent @click="onPadClear">X</button>
+            </div>
+
             <!-- Custom Mode Setup Controls -->
             <div class="controls" v-if="isDefiningCustom">
                 <button @click="startNewGame">Cancel</button>
@@ -1034,5 +1081,35 @@ button.active {
     flex-direction: column;
     align-items: center;
     width: 100%;
+}
+
+.number-pad {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    margin-bottom: 10px;
+    width: 100%;
+    max-width: 450px;
+}
+
+.pad-btn {
+    padding: 15px 0;
+    font-size: 1.2rem;
+    font-weight: bold;
+    background-color: #f0f0f0;
+    color: #333;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    min-width: 0; /* Override default min-width */
+}
+
+.pad-btn:active {
+    background-color: #e0e0e0;
+}
+
+.clear-btn {
+    background-color: #ffcccc;
+    color: #cc0000;
+    grid-column: span 1;
 }
 </style>
