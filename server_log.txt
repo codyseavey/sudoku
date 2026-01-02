@@ -1,0 +1,5 @@
+2026/01/02 01:43:30 Starting Sudoku Server v1.1 (Stats V3)
+2026/01/02 01:43:30 Warning: Frontend directory not found. Checked 'dist' and '../frontend/dist'.
+2026/01/02 01:43:30 Serving frontend from: ../frontend/dist
+Server starting on port 8080...
+2026/01/02 01:45:51 Generating puzzle: difficulty=medium, size=9, type=standard, CF-Connecting-IP=, SourceIP=[::1]:36202, UserAgent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/140.0.7339.16 Safari/537.36

@@ -46,11 +46,14 @@ onMounted(async () => {
             <div v-for="(sizes, type) in stats.details" :key="type" class="type-section">
                 <h3>{{ formatType(type) }}</h3>
                 <div v-for="(difficulties, size) in sizes" :key="size" class="size-section">
-                    <h4>{{ formatSize(size) }}</h4>
-                    <div v-for="(count, difficulty) in difficulties" :key="difficulty" class="stat-item sub-stat">
-                        <span class="label">{{ formatDifficulty(difficulty) }}:</span>
-                        <span class="value">{{ count }}</span>
-                    </div>
+                    <!-- Guard against malformed/legacy data where size might be a difficulty key -->
+                    <template v-if="typeof difficulties === 'object' && !isNaN(parseInt(size))">
+                        <h4>{{ formatSize(size) }}</h4>
+                        <div v-for="(count, difficulty) in difficulties" :key="difficulty" class="stat-item sub-stat">
+                            <span class="label">{{ formatDifficulty(difficulty) }}:</span>
+                            <span class="value">{{ count }}</span>
+                        </div>
+                    </template>
                 </div>
             </div>
         </div>
