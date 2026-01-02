@@ -148,10 +148,32 @@ const saveGame = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(gameState))
 }
 
+const loadUploadedBoard = (data: number[][]) => {
+    // Setup from upload (similar to defining custom, but prefilled)
+    board.value = data.map(row => row.map(val => val === 0 ? null : val))
+    isFixed.value = Array.from({ length: props.size }, () => Array(props.size).fill(false)) // Editable
+    solution.value = [] // Not solved yet
+    initialBoardState.value = []
+    isDefiningCustom.value = true
+
+    resetCandidates()
+    history.value = []
+    timer.value = 0
+    stopTimer()
+    saveGame()
+    message.value = 'Puzzle uploaded. Please verify and edit if needed.'
+}
+
 const loadGame = (): boolean => {
     // If we have an imported puzzle, use it strictly
     if (props.initialPuzzle) {
         loadImportedPuzzle(props.initialPuzzle)
+        return true
+    }
+
+    // If we have an uploaded board for custom mode, use it
+    if (props.isCustomMode && props.initialBoardUpload) {
+        loadUploadedBoard(props.initialBoardUpload)
         return true
     }
 

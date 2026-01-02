@@ -12,8 +12,6 @@ import (
 	"strings"
 )
 
-var GeminiBaseURL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-
 type GeminiRequest struct {
 	Contents []GeminiContent `json:"contents"`
 }
@@ -48,7 +46,14 @@ func ExtractSudokuFromImage(imageBytes []byte) ([][]int, error) {
 
 	encodedImage := base64.StdEncoding.EncodeToString(imageBytes)
 
-	prompt := "Extract the sudoku grid from this image. Return ONLY a JSON object with a 'board' field which is a 9x9 array of integers. Use 0 for empty cells. Important: Ignore any small candidate numbers (pencil marks) in the corners of cells; only extract the large, central, fixed numbers."
+	prompt := `Analyze the image of a Sudoku puzzle. Extract the 9x9 grid state into a JSON object.
+Rules:
+1. Return ONLY a valid JSON object with a single field "board" containing a 9x9 array of integers.
+2. Use 0 for empty cells.
+3. CRITICAL: The puzzle contains "pencil marks" (small numbers in the corners/edges). IGNORE THESE.
+4. Only extract the LARGE, CENTRAL digits that represent the placed numbers.
+5. If a cell contains only small pencil marks, it is considered empty (0).
+6. Do not include markdown formatting like ` + "`" + `` + "`" + `json` + "`" + `` + "`" + `.`
 
 	mimeType := http.DetectContentType(imageBytes)
 	// Default to jpeg if detection fails or is generic application/octet-stream,
