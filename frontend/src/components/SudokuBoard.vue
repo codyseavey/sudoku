@@ -6,7 +6,8 @@ const props = defineProps<{
     size: number,
     initialPuzzle?: Record<string, any>,
     isCustomMode?: boolean,
-    gameType?: string
+    gameType?: string,
+    initialBoardUpload?: number[][]
 }>()
 
 const emit = defineEmits(['back-to-menu', 'puzzle-completed'])
