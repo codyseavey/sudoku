@@ -13,18 +13,21 @@ const gameSettings = ref({ difficulty: 'medium', size: 9, isCustomMode: false, g
 const importedPuzzle = ref<Record<string, any> | undefined>(undefined)
 // For raw board data from upload (array of arrays)
 const initialBoardState = ref<number[][] | undefined>(undefined)
+const initialCagesState = ref<{ sum: number, cells: { row: number, col: number }[] }[] | undefined>(undefined)
 
 const onStartGame = (settings: { difficulty: string, size: number, gameType?: string }) => {
     gameSettings.value = { ...settings, isCustomMode: false, gameType: settings.gameType || 'standard' }
     importedPuzzle.value = undefined
     initialBoardState.value = undefined
+    initialCagesState.value = undefined
     currentView.value = 'game'
 }
 
-const onCreateCustom = (settings: { size: number, gameType?: string, initialBoard?: number[][] }) => {
+const onCreateCustom = (settings: { size: number, gameType?: string, initialBoard?: number[][], initialCages?: { sum: number, cells: { row: number, col: number }[] }[] }) => {
     gameSettings.value = { difficulty: 'custom', size: settings.size, isCustomMode: true, gameType: settings.gameType || 'standard' }
     importedPuzzle.value = undefined
     initialBoardState.value = settings.initialBoard
+    initialCagesState.value = settings.initialCages
     currentView.value = 'game'
 }
 
@@ -151,6 +154,7 @@ onMounted(() => {
         :gameType="gameSettings.gameType"
         :initialPuzzle="importedPuzzle"
         :initialBoardUpload="initialBoardState"
+        :initialCages="initialCagesState"
         @back-to-menu="onBackToMenu"
         @puzzle-completed="onPuzzleCompleted"
     />

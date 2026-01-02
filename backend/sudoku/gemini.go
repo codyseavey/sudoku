@@ -9,8 +9,11 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 )
+
+var VerboseLogging bool
 
 type GeminiRequest struct {
 	Contents []GeminiContent `json:"contents"`
@@ -53,28 +56,32 @@ func ExtractSudokuFromImage(imageBytes []byte, gameType string) (Puzzle, error) 
 		prompt += `
 **Visual Guide for Killer Sudoku:**
 - **Grid:** 9x9 grid.
-- **Cages:** Defined by **dashed/dotted lines** surrounding groups of cells.
+- **Cages:** Defined by **dashed/dotted lines** surrounding groups of cells. These dashed lines are **hard boundaries**.
 - **Cage Sums:** Small numbers usually located in the **top-left corner** of the first cell of a cage.
 - **Placed Numbers:** Large, centered digits in cells. These go into the "board".
 - **Empty Cells:** Cells with no large centered digit. Use 0.
-- **Noise:** Ignore small pencil marks/candidates (multiple small numbers in a cell). Only focus on the cage sum (single small number in corner) and placed number (large center).
+- **Noise:** Ignore small pencil marks/candidates (multiple small numbers in a cell).
+
+**Critical Rules for Cage Extraction:**
+1. **Follow the Lines:** The dashed/dotted lines are the absolute reference. If there is a dashed line between two cells, they BELONG TO DIFFERENT CAGES (different IDs).
+2. **Single-Cell Cages:** It is common to have cages that contain only 1 cell. This is especially true if the cell contains a placed number. If a cell is boxed in by dashed lines on all 4 sides, it is its own cage.
+3. **Don't Guess:** Do not assume a cage "looks like" a 3-cell block. Look at the lines. If the lines isolate a cell, it is isolated.
 
 **Output Requirements:**
 Return ONLY a raw JSON object (no markdown, no code blocks) with this structure:
 {
   "board": [[...], ...], // 9x9 array of integers (0-9)
-  "cages": [
-    {
-      "sum": <int>, // The small number in the corner
-      "cells": [{"row": <int>, "col": <int>}, ...] // 0-indexed coordinates
-    },
+  "cage_map": [[...], ...], // 9x9 array of strings. Each cell contains a unique ID (e.g. "a", "b", "c"...) identifying the cage it belongs to.
+  "cage_sums": {
+    "a": <int>,
+    "b": <int>,
     ...
-  ]
+  } // Map where keys are the IDs from cage_map and values are the cage sums.
 }
 
 **Important:**
-- Every cell (0,0) to (8,8) must belong to exactly one cage.
-- Ensure the cage structure follows the dashed lines precisely.
+- Every cell (0,0) to (8,8) must have a cage ID in "cage_map".
+- "cage_map" allows you to spatially define the cages, ensuring the shape is correct.
 `
 	} else {
 		prompt += `
@@ -115,8 +122,14 @@ Rules:
 		return emptyPuzzle, err
 	}
 
-	// Use gemini-3.0-pro-image for image understanding
-	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro-image:generateContent?key=" + apiKey
+	model := "gemini-2.5-flash-image"
+	if gameType == "killer" {
+		// Use more advanced model for killer sudoku
+		model = "gemini-3-pro-image-preview"
+
+	}
+
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=", model) + apiKey
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return emptyPuzzle, err
@@ -139,6 +152,10 @@ Rules:
 
 	text := geminiResp.Candidates[0].Content.Parts[0].Text
 
+	if VerboseLogging {
+		fmt.Printf("DEBUG: Raw Gemini Response: %s\n", text)
+	}
+
 	return ParseGeminiResponse(text, gameType)
 }
 
@@ -156,16 +173,87 @@ func ParseGeminiResponse(text string, gameType string) (Puzzle, error) {
 	}
 	text = strings.TrimSpace(text)
 
-	var result Puzzle // Can unmarshal directly into Puzzle struct or a compatible struct
+	// Temporary struct to handle the new format
+	type GeminiRawResponse struct {
+		Board    Grid           `json:"board"`
+		CageMap  [][]string     `json:"cage_map"`
+		CageSums map[string]int `json:"cage_sums"`
+		Cages    []Cage         `json:"cages"` // Legacy support or fallthrough
+	}
 
-	if err := json.Unmarshal([]byte(text), &result); err != nil {
+	var raw GeminiRawResponse
+	if err := json.Unmarshal([]byte(text), &raw); err != nil {
+		// Fallback: try parsing directly as Puzzle (old format might still be cached or returned?)
+		// Actually, let's just error if it doesn't match expected structure or standard Puzzle structure
+		// But since we changed the prompt, we expect the new structure.
+		// However, standard games won't have cage_map.
+		var simplePuzzle Puzzle
+		if err2 := json.Unmarshal([]byte(text), &simplePuzzle); err2 == nil {
+			simplePuzzle.GameType = gameType
+			return simplePuzzle, nil
+		}
 		return emptyPuzzle, fmt.Errorf("failed to parse board json: %v. Text was: %s", err, text)
 	}
 
-	if len(result.Board) != 9 {
-		return emptyPuzzle, fmt.Errorf("invalid board size: %d", len(result.Board))
+	if len(raw.Board) != 9 {
+		// Try standard puzzle parse
+		var simplePuzzle Puzzle
+		if err := json.Unmarshal([]byte(text), &simplePuzzle); err == nil && len(simplePuzzle.Board) == 9 {
+			simplePuzzle.GameType = gameType
+			return simplePuzzle, nil
+		}
+		return emptyPuzzle, fmt.Errorf("invalid board size: %d", len(raw.Board))
 	}
 
-	result.GameType = gameType
-	return result, nil
+	puzzle := Puzzle{
+		Board:    raw.Board,
+		GameType: gameType,
+	}
+
+	// If we have a cage map, reconstruct cages
+	if len(raw.CageMap) == 9 && len(raw.CageSums) > 0 {
+		cageCells := make(map[string][]Point)
+
+		for r := 0; r < 9; r++ {
+			if len(raw.CageMap[r]) != 9 {
+				return emptyPuzzle, fmt.Errorf("invalid cage_map row size at row %d", r)
+			}
+			for c := 0; c < 9; c++ {
+				id := raw.CageMap[r][c]
+				cageCells[id] = append(cageCells[id], Point{Row: r, Col: c})
+			}
+		}
+
+		for id, sum := range raw.CageSums {
+			if cells, ok := cageCells[id]; ok {
+				// Sort cells within the cage to be deterministic (Row then Col)
+				sort.Slice(cells, func(i, j int) bool {
+					if cells[i].Row != cells[j].Row {
+						return cells[i].Row < cells[j].Row
+					}
+					return cells[i].Col < cells[j].Col
+				})
+
+				puzzle.Cages = append(puzzle.Cages, Cage{
+					Sum:   sum,
+					Cells: cells,
+				})
+			}
+		}
+
+		// Sort cages by the position of their first cell
+		sort.Slice(puzzle.Cages, func(i, j int) bool {
+			c1 := puzzle.Cages[i].Cells[0]
+			c2 := puzzle.Cages[j].Cells[0]
+			if c1.Row != c2.Row {
+				return c1.Row < c2.Row
+			}
+			return c1.Col < c2.Col
+		})
+	} else if len(raw.Cages) > 0 {
+		// Fallback if model returned old format despite instructions (unlikely but safe)
+		puzzle.Cages = raw.Cages
+	}
+
+	return puzzle, nil
 }

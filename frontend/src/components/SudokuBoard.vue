@@ -584,8 +584,10 @@ const saveCage = () => {
 
     const newCageCells: { row: number, col: number }[] = []
     currentCageSelection.value.forEach(key => {
-        const [r, c] = key.split(',').map(Number)
-        newCageCells.push({ row: r, col: c })
+        const parts = key.split(',').map(Number)
+        if (parts.length >= 2) {
+            newCageCells.push({ row: parts[0]!, col: parts[1]! })
+        }
     })
 
     cages.value.push({ sum, cells: newCageCells })
@@ -602,7 +604,7 @@ const deleteCage = () => {
     if (!selectedCell.value) return
     const { r, c } = selectedCell.value
     const idx = cages.value.findIndex(cg => cg.cells.some(cell => cell.row === r && cell.col === c))
-    if (idx > -1) {
+    if (idx > -1 && cages.value[idx]) {
         if (confirm(`Delete cage with sum ${cages.value[idx].sum}?`)) {
             cages.value.splice(idx, 1)
         }
