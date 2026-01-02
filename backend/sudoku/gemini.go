@@ -51,15 +51,31 @@ func ExtractSudokuFromImage(imageBytes []byte, gameType string) (Puzzle, error) 
 
 	if gameType == "killer" {
 		prompt += `
-Rules:
-1. Return ONLY a valid JSON object with:
-   - "board": a 9x9 array of integers (use 0 for empty cells).
-   - "cages": a list of objects, each having "sum" (integer) and "cells" (list of objects with "row" and "col" integer indices 0-8).
-2. CRITICAL: The puzzle contains "pencil marks" (small numbers). IGNORE THESE.
-3. Only extract the LARGE, CENTRAL digits that represent the placed numbers for the "board".
-4. For Killer Sudoku, the "board" is often mostly empty (0s).
-5. Extract ALL dashed-line cages and their small sum numbers into the "cages" array.
-6. Do not include markdown formatting like ` + "`" + `` + "`" + `json` + "`" + `` + "`" + `.`
+**Visual Guide for Killer Sudoku:**
+- **Grid:** 9x9 grid.
+- **Cages:** Defined by **dashed/dotted lines** surrounding groups of cells.
+- **Cage Sums:** Small numbers usually located in the **top-left corner** of the first cell of a cage.
+- **Placed Numbers:** Large, centered digits in cells. These go into the "board".
+- **Empty Cells:** Cells with no large centered digit. Use 0.
+- **Noise:** Ignore small pencil marks/candidates (multiple small numbers in a cell). Only focus on the cage sum (single small number in corner) and placed number (large center).
+
+**Output Requirements:**
+Return ONLY a raw JSON object (no markdown, no code blocks) with this structure:
+{
+  "board": [[...], ...], // 9x9 array of integers (0-9)
+  "cages": [
+    {
+      "sum": <int>, // The small number in the corner
+      "cells": [{"row": <int>, "col": <int>}, ...] // 0-indexed coordinates
+    },
+    ...
+  ]
+}
+
+**Important:**
+- Every cell (0,0) to (8,8) must belong to exactly one cage.
+- Ensure the cage structure follows the dashed lines precisely.
+`
 	} else {
 		prompt += `
 Rules:
@@ -122,6 +138,12 @@ Rules:
 	}
 
 	text := geminiResp.Candidates[0].Content.Parts[0].Text
+
+	return ParseGeminiResponse(text, gameType)
+}
+
+func ParseGeminiResponse(text string, gameType string) (Puzzle, error) {
+	var emptyPuzzle Puzzle
 
 	// Clean up markdown code blocks if present
 	text = strings.TrimSpace(text)
