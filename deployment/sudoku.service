@@ -3,6 +3,9 @@ Description=Sudoku Generator Web Server
 After=network.target
 
 [Service]
+# Load environment variables (e.g. GOOGLE_API_KEY)
+EnvironmentFile=/opt/sudoku/config.env
+
 # Replace <user> with your actual username on the server (e.g., ubuntu, root, etc.)
 User=root
 Group=root
