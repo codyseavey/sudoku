@@ -48,7 +48,7 @@ func ExtractSudokuFromImage(imageBytes []byte) ([][]int, error) {
 
 	encodedImage := base64.StdEncoding.EncodeToString(imageBytes)
 
-	prompt := "Extract the sudoku grid from this image. Return ONLY a JSON object with a 'board' field which is a 9x9 array of integers. Use 0 for empty cells. Do not include any markdown formatting or extra text."
+	prompt := "Extract the sudoku grid from this image. Return ONLY a JSON object with a 'board' field which is a 9x9 array of integers. Use 0 for empty cells. Important: Ignore any small candidate numbers (pencil marks) in the corners of cells; only extract the large, central, fixed numbers."
 
 	mimeType := http.DetectContentType(imageBytes)
 	// Default to jpeg if detection fails or is generic application/octet-stream,
@@ -78,7 +78,8 @@ func ExtractSudokuFromImage(imageBytes []byte) ([][]int, error) {
 		return nil, err
 	}
 
-	url := GeminiBaseURL + "?key=" + apiKey
+	// Use gemini-2.0-flash as 1.5-flash caused 404s
+	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + apiKey
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, err
