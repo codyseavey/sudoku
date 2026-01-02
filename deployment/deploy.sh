@@ -53,6 +53,10 @@ echo -e "${GREEN}[4/7] Transferring Files...${NC}"
 scp backend/sudoku-server $SERVER:$APP_DIR/
 scp -r frontend/dist $SERVER:$APP_DIR/
 
+# 4.5. Setup Environment
+echo -e "${GREEN}[4.5/7] Setting up Environment Variables...${NC}"
+ssh $SERVER "echo GOOGLE_API_KEY=\$(cat /home/cody/gemini-api-key) > $APP_DIR/config.env"
+
 # 5. Setup Systemd Service
 echo -e "${GREEN}[5/7] Configuring Systemd Service...${NC}"
 scp deployment/sudoku.service $SERVER:/tmp/
@@ -64,4 +68,4 @@ scp deployment/sudoku.seavey.dev.conf $SERVER:/tmp/
 ssh $SERVER "sudo mv /tmp/sudoku.seavey.dev.conf /etc/nginx/sites-available/$DOMAIN.conf && sudo ln -sf /etc/nginx/sites-available/$DOMAIN.conf /etc/nginx/sites-enabled/ && sudo nginx -t && sudo systemctl reload nginx"
 
 echo -e "${GREEN}Deployment Complete!${NC}"
-echo -e "${GREEN}App should be live at https://$DOMAIN (ensure DNS is pointed to $SERVER)${NC}"
+echo -e "${GREEN}App should be live at https://$DOMAIN"
