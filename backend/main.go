@@ -13,12 +13,45 @@ import (
 
 type Stats struct {
 	TotalSolved int `json:"totalSolved"`
-	mu          sync.Mutex
 }
 
-var stats Stats
+var (
+	stats   Stats
+	statsMu sync.Mutex
+)
+
+const statsFile = "stats.json"
+
+func loadStats() {
+	file, err := os.Open(statsFile)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("Error opening stats file: %v", err)
+		}
+		return
+	}
+	defer file.Close()
+
+	if err := json.NewDecoder(file).Decode(&stats); err != nil {
+		log.Printf("Error decoding stats file: %v", err)
+	}
+}
+
+func saveStats() {
+	file, err := os.Create(statsFile)
+	if err != nil {
+		log.Printf("Error creating stats file: %v", err)
+		return
+	}
+	defer file.Close()
+
+	if err := json.NewEncoder(file).Encode(&stats); err != nil {
+		log.Printf("Error encoding stats file: %v", err)
+	}
+}
 
 func main() {
+	loadStats()
 	mux := http.NewServeMux()
 
 	// API Endpoint
@@ -36,7 +69,11 @@ func main() {
 			size = 6
 		}
 
-		log.Printf("Generating puzzle: difficulty=%s, size=%d, type=%s", difficulty, size, gameType)
+		cfIP := r.Header.Get("CF-Connecting-IP")
+		sourceIP := r.RemoteAddr
+		userAgent := r.UserAgent()
+		log.Printf("Generating puzzle: difficulty=%s, size=%d, type=%s, CF-Connecting-IP=%s, SourceIP=%s, UserAgent=%s",
+			difficulty, size, gameType, cfIP, sourceIP, userAgent)
 
 		var puzzle sudoku.Puzzle
 		if gameType == "killer" {
@@ -68,11 +105,16 @@ func main() {
 			log.Printf("Failed to decode completion request: %v", err)
 		}
 
-		log.Printf("Puzzle Completed: difficulty=%s, size=%d, type=%s", req.Difficulty, req.Size, req.GameType)
+		cfIP := r.Header.Get("CF-Connecting-IP")
+		sourceIP := r.RemoteAddr
+		userAgent := r.UserAgent()
+		log.Printf("Puzzle Completed: difficulty=%s, size=%d, type=%s, CF-Connecting-IP=%s, SourceIP=%s, UserAgent=%s",
+			req.Difficulty, req.Size, req.GameType, cfIP, sourceIP, userAgent)
 
-		stats.mu.Lock()
+		statsMu.Lock()
 		stats.TotalSolved++
-		stats.mu.Unlock()
+		saveStats()
+		statsMu.Unlock()
 
 		w.WriteHeader(http.StatusOK)
 	})
@@ -84,8 +126,8 @@ func main() {
 			return
 		}
 
-		stats.mu.Lock()
-		defer stats.mu.Unlock()
+		statsMu.Lock()
+		defer statsMu.Unlock()
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(stats)
