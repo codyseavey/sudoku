@@ -12,7 +12,8 @@ import (
 )
 
 type Stats struct {
-	TotalSolved int `json:"totalSolved"`
+	TotalSolved int                       `json:"totalSolved"`
+	Details     map[string]map[string]int `json:"details"`
 }
 
 var (
@@ -52,6 +53,10 @@ func saveStats() {
 
 func main() {
 	loadStats()
+	if stats.Details == nil {
+		stats.Details = make(map[string]map[string]int)
+	}
+
 	mux := http.NewServeMux()
 
 	// API Endpoint
@@ -113,6 +118,19 @@ func main() {
 
 		statsMu.Lock()
 		stats.TotalSolved++
+
+		if stats.Details == nil {
+			stats.Details = make(map[string]map[string]int)
+		}
+		gType := req.GameType
+		if gType == "" {
+			gType = "standard"
+		}
+		if _, ok := stats.Details[gType]; !ok {
+			stats.Details[gType] = make(map[string]int)
+		}
+		stats.Details[gType][req.Difficulty]++
+
 		saveStats()
 		statsMu.Unlock()
 
