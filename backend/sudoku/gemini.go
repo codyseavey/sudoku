@@ -396,6 +396,39 @@ func ExtractSudokuFromImage(imageBytes []byte, gameType string) (Puzzle, error) 
 		}
 	}
 
+	// For classic sudoku, try local extraction service first (better pencil mark filtering)
+	if gameType == "standard" && isLocalServiceAvailable() {
+		if VerboseLogging {
+			fmt.Println("DEBUG: Using local extraction service for classic sudoku")
+		}
+		puzzle, err := extractClassicFromLocalService(imageBytes)
+		if err == nil {
+			// Validate the extraction - check for conflicts
+			size := len(puzzle.Board)
+			if size > 0 {
+				conflicts := findConflicts(puzzle.Board, size)
+				if len(conflicts) == 0 {
+					// No conflicts, also verify it's solvable
+					_, solvable := Solve(puzzle.Board, size)
+					if solvable {
+						if VerboseLogging {
+							fmt.Println("DEBUG: Local classic extraction successful and valid")
+						}
+						return puzzle, nil
+					}
+					if VerboseLogging {
+						fmt.Println("DEBUG: Local classic extraction has no conflicts but is unsolvable")
+					}
+				} else if VerboseLogging {
+					fmt.Printf("DEBUG: Local classic extraction has %d conflicts, falling back to Gemini\n", len(conflicts))
+				}
+			}
+		} else if VerboseLogging {
+			fmt.Printf("DEBUG: Local classic extraction failed: %v\n", err)
+		}
+		// Fall through to Gemini
+	}
+
 	// For classic sudoku (and killer fallback), use Gemini
 	apiKey := os.Getenv("GOOGLE_API_KEY")
 	if apiKey == "" {

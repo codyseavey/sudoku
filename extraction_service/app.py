@@ -69,6 +69,70 @@ def get_warped_grid(image_path):
     return cv2.resize(img, (1800, 1800))
 
 
+def detect_grid_lines(warped, size=9):
+    """Detect actual grid line positions using projection profiles.
+
+    Returns: (x_positions, y_positions) - lists of size+1 positions for cell boundaries
+    """
+    if len(warped.shape) == 3:
+        gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = warped.copy()
+
+    h, w = gray.shape
+
+    # Apply adaptive threshold to highlight grid lines
+    binary = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                    cv2.THRESH_BINARY_INV, 11, 2)
+
+    # Vertical projection (sum along rows) - finds vertical lines
+    v_proj = np.sum(binary, axis=0)  # Shape: (w,)
+
+    # Horizontal projection (sum along columns) - finds horizontal lines
+    h_proj = np.sum(binary, axis=1)  # Shape: (h,)
+
+    def find_line_positions(projection, total_size, num_lines):
+        """Find num_lines+1 grid line positions from projection profile."""
+        expected_spacing = total_size / num_lines
+
+        # Smooth the projection
+        kernel_size = int(expected_spacing * 0.1)
+        if kernel_size % 2 == 0:
+            kernel_size += 1
+        smoothed = np.convolve(projection, np.ones(kernel_size)/kernel_size, mode='same')
+
+        # Find peaks (grid lines)
+        positions = [0]  # Start with 0
+
+        for i in range(1, num_lines):
+            # Expected position for this line
+            expected_pos = int(i * expected_spacing)
+
+            # Search window around expected position
+            search_start = max(0, expected_pos - int(expected_spacing * 0.15))
+            search_end = min(total_size, expected_pos + int(expected_spacing * 0.15))
+
+            # Find peak in search window
+            window = smoothed[search_start:search_end]
+            if len(window) > 0:
+                peak_offset = np.argmax(window)
+                actual_pos = search_start + peak_offset
+                positions.append(actual_pos)
+            else:
+                positions.append(expected_pos)
+
+        positions.append(total_size)  # End with total size
+        return positions
+
+    # Find 10 vertical line positions (for 9 columns)
+    x_positions = find_line_positions(v_proj, w, size)
+
+    # Find 10 horizontal line positions (for 9 rows)
+    y_positions = find_line_positions(h_proj, h, size)
+
+    return x_positions, y_positions
+
+
 def remove_grid_lines(warped, size=9):
     """Remove thick solid 3x3 box boundary lines from the warped image."""
     h, w = warped.shape[:2]
@@ -892,14 +956,281 @@ def extract_with_improvements(image_path, size=None, debug=False, use_vertex_fal
 
 
 # =============================================================================
-# Classic Sudoku Extraction
+# Classic Sudoku Extraction - Helper Functions
+# =============================================================================
+
+def analyze_cell_characteristics(cell_img):
+    """Analyze cell image to determine content characteristics.
+
+    Returns dict with:
+        - mean_intensity: average pixel value
+        - contrast_ratio: ratio of dark to light pixels
+        - has_content: whether cell has significant content
+        - is_dark_on_light: True if content is dark on light background
+    """
+    if cell_img.size == 0:
+        return {'mean_intensity': 255, 'contrast_ratio': 0, 'has_content': False, 'is_dark_on_light': True}
+
+    gray = cv2.cvtColor(cell_img, cv2.COLOR_BGR2GRAY) if len(cell_img.shape) == 3 else cell_img
+
+    # Compute histogram to determine background vs foreground
+    hist = cv2.calcHist([gray], [0], None, [256], [0, 256]).flatten()
+
+    # Find background (most common intensity region)
+    # Typically either very light (>200) or very dark (<50)
+    light_bg = np.sum(hist[200:])
+    dark_bg = np.sum(hist[:50])
+
+    is_dark_on_light = light_bg > dark_bg
+
+    mean_intensity = np.mean(gray)
+
+    # Compute contrast ratio
+    if is_dark_on_light:
+        dark_pixels = np.sum(gray < 120)
+        light_pixels = np.sum(gray > 180)
+    else:
+        dark_pixels = np.sum(gray < 80)
+        light_pixels = np.sum(gray > 150)
+
+    total = gray.size
+    contrast_ratio = dark_pixels / total if is_dark_on_light else light_pixels / total
+
+    # Check if there's significant content
+    has_content = contrast_ratio > 0.01
+
+    return {
+        'mean_intensity': mean_intensity,
+        'contrast_ratio': contrast_ratio,
+        'has_content': has_content,
+        'is_dark_on_light': is_dark_on_light
+    }
+
+
+def find_largest_connected_component(binary_img):
+    """Find the largest connected component in a binary image.
+
+    Returns:
+        - mask: binary mask of largest component
+        - stats: dict with area, centroid_x, centroid_y, bbox (x, y, w, h)
+        - None, None if no components found
+    """
+    # Ensure binary image
+    if binary_img is None or binary_img.size == 0:
+        return None, None
+
+    # Find connected components
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_img, connectivity=8)
+
+    if num_labels <= 1:  # Only background
+        return None, None
+
+    # Find largest non-background component
+    # stats columns: [left, top, width, height, area]
+    # Skip label 0 (background)
+    largest_label = 1
+    largest_area = 0
+
+    for i in range(1, num_labels):
+        area = stats[i, cv2.CC_STAT_AREA]
+        if area > largest_area:
+            largest_area = area
+            largest_label = i
+
+    if largest_area == 0:
+        return None, None
+
+    # Create mask for largest component
+    mask = (labels == largest_label).astype(np.uint8) * 255
+
+    component_stats = {
+        'area': largest_area,
+        'centroid_x': centroids[largest_label][0],
+        'centroid_y': centroids[largest_label][1],
+        'bbox': (
+            stats[largest_label, cv2.CC_STAT_LEFT],
+            stats[largest_label, cv2.CC_STAT_TOP],
+            stats[largest_label, cv2.CC_STAT_WIDTH],
+            stats[largest_label, cv2.CC_STAT_HEIGHT]
+        ),
+        'num_components': num_labels - 1  # Exclude background
+    }
+
+    return mask, component_stats
+
+
+def compute_edge_sharpness(cell_img):
+    """Compute edge sharpness using Laplacian variance.
+
+    Higher values indicate cleaner/bolder strokes (placed digits).
+    Lower values indicate fuzzier/lighter strokes (pencil marks).
+    """
+    if cell_img is None or cell_img.size == 0:
+        return 0.0
+
+    gray = cv2.cvtColor(cell_img, cv2.COLOR_BGR2GRAY) if len(cell_img.shape) == 3 else cell_img
+
+    # Compute Laplacian
+    laplacian = cv2.Laplacian(gray, cv2.CV_64F)
+
+    # Variance of Laplacian indicates edge sharpness
+    return laplacian.var()
+
+
+def is_placed_digit(cell_gray, debug=False):
+    """Determine if cell contains a placed digit (not pencil marks).
+
+    Uses multiple criteria:
+    1. Size: placed digits have meaningful pixel coverage
+    2. Position: placed digits are centered
+    3. Contiguity: placed digits form connected components (not scattered)
+    4. Bounding box: placed digits have proper height
+
+    Returns: (is_placed, confidence, reason)
+    """
+    if cell_gray is None or cell_gray.size == 0:
+        return False, 0.0, "empty"
+
+    h, w = cell_gray.shape
+
+    # Detect if dark background based on cell mean
+    is_dark_background = np.mean(cell_gray) < 100
+
+    # Trim margins to avoid grid lines
+    # Use larger margin for dark backgrounds where grid lines are more prominent
+    margin_pct = 0.12 if is_dark_background else 0.08
+    margin = int(min(h, w) * margin_pct)
+    trimmed = cell_gray[margin:h-margin, margin:w-margin]
+
+    if trimmed.size == 0:
+        return False, 0.0, "trim_failed"
+
+    # Use OTSU threshold - detect if light or dark background
+    mean_val = np.mean(trimmed)
+
+    # Apply OTSU threshold
+    _, binary = cv2.threshold(trimmed, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # If light background (mean > 128), digits are dark, so invert
+    # If dark background (mean < 128), digits are light, binary is already correct
+    if mean_val > 128:
+        binary = 255 - binary
+
+    # Find largest connected component
+    mask, stats = find_largest_connected_component(binary)
+
+    if mask is None or stats is None:
+        return False, 0.0, "no_component"
+
+    trimmed_area = trimmed.shape[0] * trimmed.shape[1]
+
+    # Criterion 1: Size ratio - digits vary widely in stroke thickness
+    size_ratio = stats['area'] / trimmed_area
+
+    # Very thin-stroked digits might only be 2-3% of cell area
+    # Very thick fonts might be up to 50%
+    if size_ratio < 0.015:  # Lowered from 0.05 - thin fonts exist
+        return False, 0.0, f"too_small:{size_ratio:.3f}"
+    if size_ratio > 0.70:
+        return False, 0.0, f"too_large:{size_ratio:.3f}"
+
+    # Criterion 2: Centering
+    center_x = trimmed.shape[1] / 2
+    center_y = trimmed.shape[0] / 2
+
+    dist_x = abs(stats['centroid_x'] - center_x) / center_x
+    dist_y = abs(stats['centroid_y'] - center_y) / center_y
+
+    # Placed digits should be reasonably centered
+    # Be slightly more lenient on vertical centering (some digits are top/bottom heavy)
+    if dist_x > 0.60 or dist_y > 0.65:
+        return False, 0.0, f"off_center:x={dist_x:.2f},y={dist_y:.2f}"
+
+    # Criterion 3: Bounding box height is key - placed digits are tall
+    bbox = stats['bbox']  # (x, y, w, h)
+    bbox_h_ratio = bbox[3] / trimmed.shape[0]
+    bbox_w_ratio = bbox[2] / trimmed.shape[1]
+
+    # Placed digits should cover significant vertical portion of cell
+    # This is the key differentiator from pencil marks
+    if bbox_h_ratio < 0.35:  # Must be at least 35% of cell height
+        return False, 0.0, f"bbox_short:{bbox_h_ratio:.2f}"
+
+    # Also check that bbox is somewhat centered
+    bbox_center_x = (bbox[0] + bbox[2]/2) / trimmed.shape[1]
+    bbox_center_y = (bbox[1] + bbox[3]/2) / trimmed.shape[0]
+
+    if abs(bbox_center_x - 0.5) > 0.35 or abs(bbox_center_y - 0.5) > 0.35:
+        return False, 0.0, f"bbox_off_center:x={bbox_center_x:.2f},y={bbox_center_y:.2f}"
+
+    # Criterion 4: Component count - stricter for pencil mark detection
+    num_components = stats['num_components']
+
+    # Reject if too many scattered components (likely pencil marks)
+    # Allow up to 7 components for noisy/fragmented digits
+    if num_components > 7:
+        return False, 0.0, f"scattered:{num_components}_components"
+
+    # Special check: if bbox spans almost full height AND multiple components,
+    # it's likely pencil marks scattered across the cell rather than one digit
+    if bbox_h_ratio > 0.85 and num_components > 2:
+        return False, 0.0, f"scattered_tall:{num_components}_components,h={bbox_h_ratio:.2f}"
+
+    # Compute confidence based on how well criteria are met
+    size_score = min(1.0, size_ratio / 0.10)  # Higher size = better
+    center_score = 1.0 - (dist_x + dist_y) / 2
+    height_score = min(1.0, bbox_h_ratio / 0.6)  # Optimal around 60% height
+    component_score = 1.0 if num_components <= 3 else 0.7 if num_components <= 5 else 0.4
+
+    confidence = (size_score + center_score + height_score + component_score) / 4
+    confidence = max(0.0, min(1.0, confidence))
+
+    return True, confidence, f"ok:size={size_ratio:.2f},h={bbox_h_ratio:.2f},components={num_components}"
+
+
+def prepare_for_classic_ocr(crop, scale=2):
+    """Prepare image crop for classic sudoku OCR.
+
+    Uses OTSU thresholding with automatic background detection.
+    Handles both light and dark background images.
+    """
+    if crop.size == 0:
+        return crop
+
+    resized = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+
+    if len(resized.shape) == 3:
+        gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = resized
+
+    # Detect background type
+    mean_val = np.mean(gray)
+
+    # Apply OTSU threshold
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # Ensure digit is white on black background for OCR
+    # Light background (mean > 128): digits are dark -> need to invert
+    # Dark background (mean < 128): digits are light -> keep as is
+    if mean_val > 128:
+        binary = 255 - binary
+
+    # Add border for OCR
+    return cv2.copyMakeBorder(binary, 20, 20, 20, 20, cv2.BORDER_CONSTANT, value=0)
+
+
+# =============================================================================
+# Classic Sudoku Extraction - Main Function
 # =============================================================================
 
 def extract_classic_sudoku(image_path, size=9, debug=False):
     """Extract classic sudoku board from image (no cages).
 
-    This handles puzzles with pencil marks by filtering out small text
-    and only accepting large, centered digits with strong contrast.
+    This handles puzzles with pencil marks by:
+    1. Pre-filtering with is_placed_digit() to check for centered, tall content
+    2. Running OCR with size and position filters
+    3. Validating results with quality scoring
     """
     reader = get_reader()
     warped = get_warped_grid(image_path)
@@ -911,80 +1242,65 @@ def extract_classic_sudoku(image_path, size=9, debug=False):
 
     board = [[0] * size for _ in range(size)]
 
-    def has_bold_digit(cell_gray):
-        """Check if cell contains a bold (dark) digit vs just pencil marks.
+    def try_ocr(cell_img, min_height_ratio=0.25):
+        """Run OCR on a cell and return best digit with quality score."""
+        h, w = cell_img.shape
 
-        Bold digits have darker pixels and higher contrast than pencil marks.
-        """
-        # Get the center region
-        h, w = cell_gray.shape
-        m = int(min(h, w) * 0.15)
-        center = cell_gray[m:-m, m:-m]
+        # Trim borders
+        margin = int(min(h, w) * 0.12)
+        center = cell_img[margin:h-margin, margin:w-margin]
 
-        # Check for dark pixels (bold digits are typically < 120)
-        # Use a more lenient threshold
-        dark_pixels = np.sum(center < 120)
-        total_pixels = center.size
-        dark_ratio = dark_pixels / total_pixels
+        if center.size == 0:
+            return 0, 0
 
-        # Also check for very dark pixels (< 60) which indicate bold text
-        very_dark = np.sum(center < 60)
-        very_dark_ratio = very_dark / total_pixels
+        # Prepare for OCR
+        ocr_input = prepare_for_classic_ocr(center)
+        ocr_h, ocr_w = ocr_input.shape[:2]
 
-        # If we have very dark pixels, it's definitely a bold digit
-        if very_dark_ratio > 0.005:
-            return True
+        # Run OCR
+        results = reader.readtext(ocr_input, allowlist='0123456789', detail=1)
 
-        # If moderate darkness with decent coverage, also likely bold
-        return dark_ratio > 0.03
-
-    def try_digit_ocr(img, min_height_ratio=0.45, min_width_ratio=0.20):
-        """Try to OCR a single digit from the image.
-
-        Args:
-            img: Input image
-            min_height_ratio: Minimum bbox height as ratio of image height
-                              to filter out pencil marks (small numbers)
-            min_width_ratio: Minimum bbox width as ratio of image width
-        """
-        results = reader.readtext(img, allowlist='0123456789', detail=1)
-        best_val, best_conf = 0, 0
-        img_h, img_w = img.shape[:2]
+        best_digit = 0
+        best_score = 0
 
         for bbox, txt, conf in results:
-            if txt.isdigit():
-                v = int(txt)
-                hb = abs(bbox[2][1] - bbox[0][1])
-                wb = abs(bbox[1][0] - bbox[0][0])
+            if not txt.isdigit():
+                continue
 
-                # Filter out small pencil marks - require digit to be large
-                height_ratio = hb / img_h
-                width_ratio = wb / img_w
-                if height_ratio < min_height_ratio:
-                    continue
-                # Width filter (except for digit 1 which is narrow)
-                if v != 1 and width_ratio < min_width_ratio:
-                    continue
+            digit = int(txt)
+            if digit < 1 or digit > size:
+                continue
 
-                # Check if bbox is well-centered (strict for classic sudoku)
-                bbox_cx = (bbox[0][0] + bbox[2][0]) / 2
-                bbox_cy = (bbox[0][1] + bbox[2][1]) / 2
-                norm_cx = bbox_cx / img_w
-                norm_cy = bbox_cy / img_h
-                if norm_cx < 0.30 or norm_cx > 0.70 or norm_cy < 0.30 or norm_cy > 0.70:
-                    continue
+            # Get bounding box info
+            bbox_h = abs(bbox[2][1] - bbox[0][1])
+            bbox_w = abs(bbox[1][0] - bbox[0][0])
+            bbox_cx = (bbox[0][0] + bbox[2][0]) / 2
+            bbox_cy = (bbox[0][1] + bbox[2][1]) / 2
 
-                # Aspect ratio correction for 1 vs 7
-                ar = wb / hb if hb > 0 else 0
-                if v == 7 and ar < 0.65:
-                    v = 1
-                elif v == 1 and ar > 0.789:
-                    v = 7
+            height_ratio = bbox_h / ocr_h
+            center_x = bbox_cx / ocr_w
+            center_y = bbox_cy / ocr_h
 
-                if 1 <= v <= size and conf > best_conf:
-                    best_conf = conf
-                    best_val = v
-        return best_val, best_conf
+            # Height filter - key for rejecting pencil marks
+            if height_ratio < min_height_ratio:
+                continue
+
+            # Center filter
+            if center_x < 0.20 or center_x > 0.80 or center_y < 0.20 or center_y > 0.80:
+                continue
+
+            # Quality score
+            height_score = min(1.0, (height_ratio - 0.25) / 0.40)
+            center_dist = ((center_x - 0.5)**2 + (center_y - 0.5)**2) ** 0.5
+            center_score = max(0, 1.0 - center_dist * 2)
+
+            score = conf * 0.5 + height_score * 0.25 + center_score * 0.25
+
+            if score > best_score:
+                best_score = score
+                best_digit = digit
+
+        return best_digit, best_score
 
     for r in range(size):
         for c in range(size):
@@ -992,30 +1308,49 @@ def extract_classic_sudoku(image_path, size=9, debug=False):
             x1, x2 = c * cell_w, (c + 1) * cell_w
             cell_img = gray[y1:y2, x1:x2]
 
-            # First check if cell has a bold digit (not just pencil marks)
-            if not has_bold_digit(cell_img):
+            # Pre-filter with is_placed_digit
+            is_placed, placement_conf, reason = is_placed_digit(cell_img)
+
+            # Handle "too_large" as possible highlighted/selected cell
+            # These cells often have colored backgrounds that confuse thresholding
+            is_possibly_highlighted = reason.startswith("too_large")
+
+            if not is_placed and not is_possibly_highlighted:
+                if debug:
+                    print(f"Cell [{r},{c}]: skipped ({reason})")
                 board[r][c] = 0
                 continue
 
-            # Focus on center region (avoid borders and pencil marks)
-            m = int(cell_h * 0.15)
-            center = cell_img[m:-m, m:-m]
-            ocr_in = prepare_for_ocr(center)
+            # Run OCR
+            digit, score = try_ocr(cell_img)
 
-            val, bc = try_digit_ocr(ocr_in)
-
-            # Try with dilation if low confidence
-            if val == 0 or bc < 0.5:
+            # If low score, try with dilation
+            if digit == 0 or score < 0.4:
+                h, w = cell_img.shape
+                margin = int(min(h, w) * 0.12)
+                center = cell_img[margin:h-margin, margin:w-margin]
+                ocr_input = prepare_for_classic_ocr(center)
                 kernel = np.ones((3, 3), np.uint8)
-                dilated = cv2.dilate(ocr_in, kernel, iterations=3)
-                val_d, bc_d = try_digit_ocr(dilated)
-                if bc_d >= 0.4 and bc_d > bc:
-                    val, bc = val_d, bc_d
+                dilated = cv2.dilate(ocr_input, kernel, iterations=2)
 
-            if bc < 0.4:
-                val = 0
+                results = reader.readtext(dilated, allowlist='0123456789', detail=1)
+                for bbox, txt, conf in results:
+                    if txt.isdigit():
+                        d = int(txt)
+                        bbox_h = abs(bbox[2][1] - bbox[0][1])
+                        height_ratio = bbox_h / dilated.shape[0]
+                        if height_ratio >= 0.30 and 1 <= d <= size and conf > 0.5:
+                            if conf > score:
+                                digit, score = d, conf
+                            break
 
-            board[r][c] = val
+            if score < 0.35:
+                digit = 0
+
+            if debug:
+                print(f"Cell [{r},{c}]: digit={digit}, score={score:.2f}")
+
+            board[r][c] = digit
 
     return {"board": board}
 
