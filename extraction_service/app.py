@@ -32,7 +32,7 @@ def get_reader():
 
 
 # =============================================================================
-# Image Processing Functions (from local_extractor.py)
+# Image Processing Functions
 # =============================================================================
 
 def get_warped_grid(image_path):
@@ -892,6 +892,135 @@ def extract_with_improvements(image_path, size=None, debug=False, use_vertex_fal
 
 
 # =============================================================================
+# Classic Sudoku Extraction
+# =============================================================================
+
+def extract_classic_sudoku(image_path, size=9, debug=False):
+    """Extract classic sudoku board from image (no cages).
+
+    This handles puzzles with pencil marks by filtering out small text
+    and only accepting large, centered digits with strong contrast.
+    """
+    reader = get_reader()
+    warped = get_warped_grid(image_path)
+    if warped is None:
+        return None
+
+    cell_h, cell_w = 1800 // size, 1800 // size
+    gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
+
+    board = [[0] * size for _ in range(size)]
+
+    def has_bold_digit(cell_gray):
+        """Check if cell contains a bold (dark) digit vs just pencil marks.
+
+        Bold digits have darker pixels and higher contrast than pencil marks.
+        """
+        # Get the center region
+        h, w = cell_gray.shape
+        m = int(min(h, w) * 0.15)
+        center = cell_gray[m:-m, m:-m]
+
+        # Check for dark pixels (bold digits are typically < 120)
+        # Use a more lenient threshold
+        dark_pixels = np.sum(center < 120)
+        total_pixels = center.size
+        dark_ratio = dark_pixels / total_pixels
+
+        # Also check for very dark pixels (< 60) which indicate bold text
+        very_dark = np.sum(center < 60)
+        very_dark_ratio = very_dark / total_pixels
+
+        # If we have very dark pixels, it's definitely a bold digit
+        if very_dark_ratio > 0.005:
+            return True
+
+        # If moderate darkness with decent coverage, also likely bold
+        return dark_ratio > 0.03
+
+    def try_digit_ocr(img, min_height_ratio=0.45, min_width_ratio=0.20):
+        """Try to OCR a single digit from the image.
+
+        Args:
+            img: Input image
+            min_height_ratio: Minimum bbox height as ratio of image height
+                              to filter out pencil marks (small numbers)
+            min_width_ratio: Minimum bbox width as ratio of image width
+        """
+        results = reader.readtext(img, allowlist='0123456789', detail=1)
+        best_val, best_conf = 0, 0
+        img_h, img_w = img.shape[:2]
+
+        for bbox, txt, conf in results:
+            if txt.isdigit():
+                v = int(txt)
+                hb = abs(bbox[2][1] - bbox[0][1])
+                wb = abs(bbox[1][0] - bbox[0][0])
+
+                # Filter out small pencil marks - require digit to be large
+                height_ratio = hb / img_h
+                width_ratio = wb / img_w
+                if height_ratio < min_height_ratio:
+                    continue
+                # Width filter (except for digit 1 which is narrow)
+                if v != 1 and width_ratio < min_width_ratio:
+                    continue
+
+                # Check if bbox is well-centered (strict for classic sudoku)
+                bbox_cx = (bbox[0][0] + bbox[2][0]) / 2
+                bbox_cy = (bbox[0][1] + bbox[2][1]) / 2
+                norm_cx = bbox_cx / img_w
+                norm_cy = bbox_cy / img_h
+                if norm_cx < 0.30 or norm_cx > 0.70 or norm_cy < 0.30 or norm_cy > 0.70:
+                    continue
+
+                # Aspect ratio correction for 1 vs 7
+                ar = wb / hb if hb > 0 else 0
+                if v == 7 and ar < 0.65:
+                    v = 1
+                elif v == 1 and ar > 0.789:
+                    v = 7
+
+                if 1 <= v <= size and conf > best_conf:
+                    best_conf = conf
+                    best_val = v
+        return best_val, best_conf
+
+    for r in range(size):
+        for c in range(size):
+            y1, y2 = r * cell_h, (r + 1) * cell_h
+            x1, x2 = c * cell_w, (c + 1) * cell_w
+            cell_img = gray[y1:y2, x1:x2]
+
+            # First check if cell has a bold digit (not just pencil marks)
+            if not has_bold_digit(cell_img):
+                board[r][c] = 0
+                continue
+
+            # Focus on center region (avoid borders and pencil marks)
+            m = int(cell_h * 0.15)
+            center = cell_img[m:-m, m:-m]
+            ocr_in = prepare_for_ocr(center)
+
+            val, bc = try_digit_ocr(ocr_in)
+
+            # Try with dilation if low confidence
+            if val == 0 or bc < 0.5:
+                kernel = np.ones((3, 3), np.uint8)
+                dilated = cv2.dilate(ocr_in, kernel, iterations=3)
+                val_d, bc_d = try_digit_ocr(dilated)
+                if bc_d >= 0.4 and bc_d > bc:
+                    val, bc = val_d, bc_d
+
+            if bc < 0.4:
+                val = 0
+
+            board[r][c] = val
+
+    return {"board": board}
+
+
+# =============================================================================
 # Flask Routes
 # =============================================================================
 
@@ -964,10 +1093,110 @@ def extract():
             pass
 
 
-# Preload the reader when module is imported (for gunicorn --preload)
-print("Preloading EasyOCR model (this may take a moment)...")
-get_reader()
-print("EasyOCR model preloaded successfully!")
+@app.route('/extract-cells', methods=['POST'])
+def extract_cells():
+    """
+    Extract specific cell images from a sudoku puzzle image.
+
+    Request: multipart/form-data with 'image' file and 'cells' JSON array of [row, col] pairs
+    Response: JSON with cell images as base64
+    """
+    import base64
+
+    if 'image' not in request.files:
+        return jsonify({"error": "No image provided"}), 400
+
+    if 'cells' not in request.form:
+        return jsonify({"error": "No cells specified"}), 400
+
+    image_file = request.files['image']
+    size = int(request.form.get('size', '9'))
+
+    try:
+        cells = json.loads(request.form['cells'])
+    except json.JSONDecodeError:
+        return jsonify({"error": "Invalid cells JSON"}), 400
+
+    # Save image to temp file
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+        image_file.save(tmp.name)
+        tmp_path = tmp.name
+
+    try:
+        warped = get_warped_grid(tmp_path)
+        if warped is None:
+            return jsonify({"error": "Failed to extract grid from image"}), 500
+
+        cell_h, cell_w = 1800 // size, 1800 // size
+        cell_images = {}
+
+        for cell in cells:
+            row, col = cell[0], cell[1]
+            if 0 <= row < size and 0 <= col < size:
+                y1, y2 = row * cell_h, (row + 1) * cell_h
+                x1, x2 = col * cell_w, (col + 1) * cell_w
+                cell_img = warped[y1:y2, x1:x2]
+
+                # Encode as base64 PNG
+                _, buffer = cv2.imencode('.png', cell_img)
+                img_base64 = base64.b64encode(buffer).decode('utf-8')
+                cell_images[f"{row},{col}"] = img_base64
+
+        return jsonify({"cells": cell_images})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except:
+            pass
+
+
+@app.route('/extract-classic', methods=['POST'])
+def extract_classic():
+    """
+    Extract classic sudoku from uploaded image.
+
+    Request: multipart/form-data with 'image' file
+    Response: JSON with board only
+    """
+    if 'image' not in request.files:
+        return jsonify({"error": "No image provided"}), 400
+
+    image_file = request.files['image']
+    size = request.form.get('size', '9')
+
+    try:
+        size = int(size)
+    except ValueError:
+        size = 9
+
+    # Save image to temp file
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+        image_file.save(tmp.name)
+        tmp_path = tmp.name
+
+    try:
+        result = extract_classic_sudoku(tmp_path, size=size, debug=False)
+
+        if result is None:
+            return jsonify({"error": "Failed to extract puzzle from image"}), 500
+
+        return jsonify(result)
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except:
+            pass
+
+
+# Model will be loaded lazily on first request to avoid CUDA fork issues
 
 if __name__ == '__main__':
     import argparse

@@ -52,3 +52,6 @@ backend/sudoku_server
 # Go workspace
 go.work
 server_log.txt
+
+# creds
+test_data/google-cloud-adminSvc.json
