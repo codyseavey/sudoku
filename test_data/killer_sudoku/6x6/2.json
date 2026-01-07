@@ -1,0 +1,219 @@
+{
+  "size": 6,
+  "board": [
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      2,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  ],
+  "cage_map": [
+    [
+      "a",
+      "b",
+      "c",
+      "c",
+      "d",
+      "e"
+    ],
+    [
+      "f",
+      "g",
+      "g",
+      "g",
+      "g",
+      "h"
+    ],
+    [
+      "f",
+      "g",
+      "g",
+      "g",
+      "g",
+      "h"
+    ],
+    [
+      "f",
+      "g",
+      "g",
+      "g",
+      "g",
+      "h"
+    ],
+    [
+      "f",
+      "g",
+      "g",
+      "g",
+      "g",
+      "h"
+    ],
+    [
+      "i",
+      "j",
+      "j",
+      "j",
+      "k",
+      "l"
+    ]
+  ],
+  "cage_sums": {
+    "a": 1,
+    "b": 3,
+    "c": 6,
+    "d": 1,
+    "e": 1,
+    "f": 11,
+    "g": 0,
+    "h": 0,
+    "i": 1,
+    "j": 0,
+    "k": 1,
+    "l": 1
+  },
+  "walls": {
+    "right_walls": [
+      [
+        true,
+        true,
+        false,
+        true,
+        true,
+        true
+      ],
+      [
+        true,
+        false,
+        false,
+        true,
+        true,
+        true
+      ],
+      [
+        true,
+        true,
+        false,
+        true,
+        true,
+        true
+      ],
+      [
+        true,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      [
+        true,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      [
+        true,
+        false,
+        false,
+        true,
+        true,
+        true
+      ]
+    ],
+    "bottom_walls": [
+      [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        false,
+        true,
+        false,
+        true,
+        false,
+        false
+      ],
+      [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        true
+      ]
+    ]
+  }
+}

@@ -7,11 +7,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"sort"
 	"strings"
+	"time"
 )
+
+// LocalExtractionServiceURL is the URL of the Python extraction service
+var LocalExtractionServiceURL = "http://127.0.0.1:5001"
 
 var VerboseLogging bool
 
@@ -41,8 +46,170 @@ type GeminiCandidate struct {
 	Content GeminiContent `json:"content"`
 }
 
+// extractFromLocalService attempts to extract a killer sudoku puzzle using
+// the local Python extraction service (OpenCV + EasyOCR based)
+func extractFromLocalService(imageBytes []byte, mimeType string) (Puzzle, error) {
+	var emptyPuzzle Puzzle
+
+	// Create a multipart form request
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	// Add the image file
+	part, err := writer.CreateFormFile("image", "puzzle.png")
+	if err != nil {
+		return emptyPuzzle, fmt.Errorf("failed to create form file: %v", err)
+	}
+	if _, err := part.Write(imageBytes); err != nil {
+		return emptyPuzzle, fmt.Errorf("failed to write image data: %v", err)
+	}
+
+	// Add size parameter
+	if err := writer.WriteField("size", "9"); err != nil {
+		return emptyPuzzle, fmt.Errorf("failed to write size field: %v", err)
+	}
+
+	if err := writer.Close(); err != nil {
+		return emptyPuzzle, fmt.Errorf("failed to close writer: %v", err)
+	}
+
+	// Make the request with a timeout
+	client := &http.Client{Timeout: 60 * time.Second}
+	req, err := http.NewRequest("POST", LocalExtractionServiceURL+"/extract", body)
+	if err != nil {
+		return emptyPuzzle, fmt.Errorf("failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return emptyPuzzle, fmt.Errorf("local extraction service unavailable: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return emptyPuzzle, fmt.Errorf("local extraction failed: %s", string(respBody))
+	}
+
+	// Parse the response
+	type LocalExtractionResponse struct {
+		Board    Grid              `json:"board"`
+		CageMap  [][]string        `json:"cage_map"`
+		CageSums map[string]int    `json:"cage_sums"`
+		Metadata map[string]interface{} `json:"metadata"`
+	}
+
+	var localResp LocalExtractionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&localResp); err != nil {
+		return emptyPuzzle, fmt.Errorf("failed to parse local extraction response: %v", err)
+	}
+
+	// Check if extraction was valid
+	if localResp.Metadata != nil {
+		if valid, ok := localResp.Metadata["valid"].(bool); ok && !valid {
+			totalSum := 0
+			if ts, ok := localResp.Metadata["total_sum"].(float64); ok {
+				totalSum = int(ts)
+			}
+			if VerboseLogging {
+				fmt.Printf("DEBUG: Local extraction invalid (sum=%d, expected=405)\n", totalSum)
+			}
+			// Continue anyway - the extraction might still be usable
+		}
+	}
+
+	// Convert to Puzzle format
+	puzzle := Puzzle{
+		Board:    localResp.Board,
+		GameType: "killer",
+	}
+
+	// Build cages from cage_map and cage_sums
+	if len(localResp.CageMap) == 9 && len(localResp.CageSums) > 0 {
+		cageCells := make(map[string][]Point)
+
+		for r := 0; r < 9; r++ {
+			if len(localResp.CageMap[r]) != 9 {
+				return emptyPuzzle, fmt.Errorf("invalid cage_map row size at row %d", r)
+			}
+			for c := 0; c < 9; c++ {
+				id := localResp.CageMap[r][c]
+				cageCells[id] = append(cageCells[id], Point{Row: r, Col: c})
+			}
+		}
+
+		for id, sum := range localResp.CageSums {
+			if cells, ok := cageCells[id]; ok {
+				sort.Slice(cells, func(i, j int) bool {
+					if cells[i].Row != cells[j].Row {
+						return cells[i].Row < cells[j].Row
+					}
+					return cells[i].Col < cells[j].Col
+				})
+
+				puzzle.Cages = append(puzzle.Cages, Cage{
+					Sum:   sum,
+					Cells: cells,
+				})
+			}
+		}
+
+		// Sort cages by the position of their first cell
+		sort.Slice(puzzle.Cages, func(i, j int) bool {
+			c1 := puzzle.Cages[i].Cells[0]
+			c2 := puzzle.Cages[j].Cells[0]
+			if c1.Row != c2.Row {
+				return c1.Row < c2.Row
+			}
+			return c1.Col < c2.Col
+		})
+	}
+
+	if VerboseLogging {
+		totalSum := 0
+		for _, cage := range puzzle.Cages {
+			totalSum += cage.Sum
+		}
+		fmt.Printf("DEBUG: Local extraction successful. Cages=%d, TotalSum=%d\n", len(puzzle.Cages), totalSum)
+	}
+
+	return puzzle, nil
+}
+
+// isLocalServiceAvailable checks if the Python extraction service is running
+func isLocalServiceAvailable() bool {
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(LocalExtractionServiceURL + "/health")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
 func ExtractSudokuFromImage(imageBytes []byte, gameType string) (Puzzle, error) {
 	var emptyPuzzle Puzzle
+
+	// For killer sudoku, try local extraction service first
+	if gameType == "killer" {
+		if isLocalServiceAvailable() {
+			if VerboseLogging {
+				fmt.Println("DEBUG: Using local extraction service for killer sudoku")
+			}
+			mimeType := http.DetectContentType(imageBytes)
+			puzzle, err := extractFromLocalService(imageBytes, mimeType)
+			if err == nil {
+				return puzzle, nil
+			}
+			if VerboseLogging {
+				fmt.Printf("DEBUG: Local extraction failed, falling back to Gemini: %v\n", err)
+			}
+		} else if VerboseLogging {
+			fmt.Println("DEBUG: Local extraction service not available, using Gemini")
+		}
+	}
+
 	apiKey := os.Getenv("GOOGLE_API_KEY")
 	if apiKey == "" {
 		return emptyPuzzle, errors.New("GOOGLE_API_KEY not set")

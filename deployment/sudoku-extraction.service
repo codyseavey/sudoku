@@ -1,0 +1,23 @@
+[Unit]
+Description=Sudoku Killer Extraction Service (Python/Flask)
+After=network.target
+
+[Service]
+User=root
+Group=root
+
+# The directory where the Python app is located
+WorkingDirectory=/opt/sudoku/extraction_service
+
+# Use gunicorn with single worker (due to model memory requirements)
+# Longer timeout for model loading and inference (600s for CPU-based OCR)
+ExecStart=/opt/sudoku/extraction_service/venv/bin/gunicorn --bind 127.0.0.1:5001 --workers 1 --timeout 600 --preload app:app
+
+Restart=always
+RestartSec=5
+
+# Environment
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target
