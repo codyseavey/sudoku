@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, onUnmounted } from 'vue'
+import { findHint } from '../strategies'
+import type { HintResult, SolveContext } from '../strategies/types'
 
 const props = defineProps<{
     initialDifficulty: string,
@@ -34,6 +36,12 @@ const isPaused = ref(false)
 let timerInterval: number | undefined
 const isMobile = ref(false)
 const selectedCell = ref<{r: number, c: number} | null>(null)
+const isGameOver = ref(false)
+
+// Hint system state
+const hintResult = ref<HintResult | null>(null)
+const showHintHighlights = ref(false)
+const candidatesPopulated = ref(false)
 
 // Custom Cage Creation Logic
 const isCageSelectionMode = ref(false)
@@ -83,6 +91,10 @@ const initArrays = () => {
     solution.value = []
     candidates.value = Array.from({ length: s }, () => Array.from({ length: s }, () => [] as number[]))
     eliminatedCandidates.value = Array.from({ length: s }, () => Array.from({ length: s }, () => new Set<number>()))
+    // Reset hint state
+    candidatesPopulated.value = false
+    hintResult.value = null
+    showHintHighlights.value = false
 }
 
 // History Stack for Undo
@@ -109,12 +121,15 @@ const saveState = () => {
 }
 
 const undo = () => {
-    if (history.value.length === 0) return
+    if (isGameOver.value || history.value.length === 0) return
     const prevState = history.value.pop()
     if (prevState) {
         board.value = prevState.board
         candidates.value = prevState.candidates
         eliminatedCandidates.value = prevState.eliminatedCandidates
+        // Clear hints when undoing
+        hintResult.value = null
+        showHintHighlights.value = false
         message.value = 'Undo successful.'
         saveGame() // Sync with local storage
     }
@@ -491,11 +506,14 @@ const isBoardFull = () => {
 
 const showSolution = () => {
     if (solution.value.length === 0) return
-    saveState() // Save before revealing
     board.value = solution.value.map(row => [...row])
     resetCandidates()
     message.value = 'Solution revealed.'
     stopTimer()
+    isGameOver.value = true
+    history.value = [] // Clear undo history
+    // End the game by clearing the saved state
+    localStorage.removeItem(STORAGE_KEY)
 }
 
 const removeCandidates = (r: number, c: number, val: number) => {
@@ -540,7 +558,7 @@ const handleKeydown = (e: KeyboardEvent, r: number, c: number) => {
     // Allow navigation and deletion normally
     if (['Backspace', 'Delete', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) {
         if (['Backspace', 'Delete'].includes(key)) {
-            if (!isFixed.value[r]![c] && board.value[r]![c] !== null) {
+            if (!isGameOver.value && !isFixed.value[r]![c] && board.value[r]![c] !== null) {
                  saveState() // Save before clearing
                  board.value[r]![c] = null
             }
@@ -614,6 +632,7 @@ const deleteCage = () => {
 const setCellValue = (r: number, c: number, num: number) => {
     // In custom definition mode, we don't check isFixed (everything is editable initially)
     // Once game starts, we check isFixed.
+    if (isGameOver.value) return
     if (!isDefiningCustom.value && isFixed.value[r]?.[c]) return
 
     saveState()
@@ -660,7 +679,7 @@ const onPadInput = (num: number) => {
 }
 
 const onPadClear = () => {
-    if (!selectedCell.value) return
+    if (!selectedCell.value || isGameOver.value) return
     const { r, c } = selectedCell.value
     if (!isFixed.value[r]![c] && board.value[r]![c] !== null) {
         saveState() // Save before clearing
@@ -702,7 +721,97 @@ const generateCandidates = () => {
             }
         }
     }
+    candidatesPopulated.value = true
+    // Clear any previous hint when refreshing candidates
+    hintResult.value = null
+    showHintHighlights.value = false
     message.value = 'Candidates generated (respecting eliminations.)'
+}
+
+// Hint System Functions
+const getHint = () => {
+    if (!candidatesPopulated.value) {
+        message.value = 'Please populate candidates first.'
+        return
+    }
+
+    const context: SolveContext = {
+        board: board.value,
+        candidates: candidates.value,
+        size: props.size,
+        boxHeight: props.size === 6 ? 2 : 3,
+        boxWidth: 3,
+        gameType: (props.gameType as 'standard' | 'killer') || 'standard',
+        cages: cages.value.length > 0 ? cages.value : undefined,
+    }
+
+    const hint = findHint(context)
+
+    if (hint) {
+        hintResult.value = hint
+        showHintHighlights.value = true
+        message.value = `${hint.strategyName}: ${hint.description}`
+    } else {
+        hintResult.value = null
+        showHintHighlights.value = false
+        message.value = 'No hint available. The puzzle may be solved or require more advanced techniques.'
+    }
+}
+
+const applyHint = () => {
+    if (!hintResult.value || hintResult.value.eliminations.length === 0) {
+        message.value = 'No eliminations to apply.'
+        return
+    }
+
+    saveState()
+
+    for (const elim of hintResult.value.eliminations) {
+        const idx = candidates.value[elim.row]?.[elim.col]?.indexOf(elim.candidate)
+        if (idx !== undefined && idx > -1) {
+            candidates.value[elim.row]![elim.col]!.splice(idx, 1)
+            eliminatedCandidates.value[elim.row]![elim.col]!.add(elim.candidate)
+        }
+    }
+
+    message.value = `Applied ${hintResult.value.strategyName}: ${hintResult.value.eliminations.length} candidate(s) eliminated.`
+    hintResult.value = null
+    showHintHighlights.value = false
+}
+
+const dismissHint = () => {
+    hintResult.value = null
+    showHintHighlights.value = false
+    message.value = ''
+}
+
+// Helper function to get highlight class for a cell
+const getHintHighlightClass = (row: number, col: number): Record<string, boolean> => {
+    if (!showHintHighlights.value || !hintResult.value) return {}
+
+    const highlight = hintResult.value.highlights.find(h => h.row === row && h.col === col)
+    if (!highlight) return {}
+
+    return {
+        'hint-primary': highlight.type === 'primary',
+        'hint-secondary': highlight.type === 'secondary',
+        'hint-elimination': highlight.type === 'elimination',
+    }
+}
+
+// Helper function to check if a specific candidate should be highlighted
+const getCandidateHighlightClass = (row: number, col: number, num: number): Record<string, boolean> => {
+    if (!showHintHighlights.value || !hintResult.value) return {}
+
+    const highlight = hintResult.value.highlights.find(h =>
+        h.row === row && h.col === col && h.candidates?.includes(num)
+    )
+    if (!highlight) return {}
+
+    return {
+        'candidate-highlight-primary': highlight.type === 'primary',
+        'candidate-highlight-elimination': highlight.type === 'elimination',
+    }
 }
 
 const getValidNumbers = (row: number, col: number): number[] => {
@@ -827,7 +936,8 @@ onUnmounted(() => {
                 class="cell"
                 :class="[
                     getCageStyle(rIndex, cIndex),
-                    { 'cage-selected': currentCageSelection.has(`${rIndex},${cIndex}`) }
+                    { 'cage-selected': currentCageSelection.has(`${rIndex},${cIndex}`) },
+                    getHintHighlightClass(rIndex, cIndex)
                 ]"
                 @click="onCellClickInCageMode(rIndex, cIndex)"
             >
@@ -857,10 +967,11 @@ onUnmounted(() => {
 
                 <!-- Candidates Overlay -->
                 <div v-if="!isDefiningCustom && cell === null && candidates[rIndex]![cIndex]!.length > 0" class="candidates-grid" :class="[`size-${size}`, { 'killer-mode': gameType === 'killer' }]">
-                    <div 
+                    <div
                         v-for="num in size"
                         :key="num"
                         class="candidate-cell"
+                        :class="getCandidateHighlightClass(rIndex, cIndex, num)"
                     >
                         {{ candidates[rIndex]![cIndex]!.includes(num) ? num : '' }}
                     </div>
@@ -906,24 +1017,43 @@ onUnmounted(() => {
                 <button @click="isPaused ? resumeTimer() : pauseTimer()">
                     {{ isPaused ? 'Resume' : 'Pause' }}
                 </button>
-                <button @click="undo" :disabled="isPaused">Undo</button>
+                <button @click="undo" :disabled="isPaused || isGameOver">Undo</button>
                 <button @click="shareGame">Share</button>
                 <button @click="showSolution" class="secondary">Show Solution</button>
             </div>
             
             <div class="controls secondary-controls" v-if="!isDefiningCustom">
-                <button 
-                    @click="isNoteMode = !isNoteMode" 
+                <button
+                    @click="isNoteMode = !isNoteMode"
                     :class="{ 'active': isNoteMode }"
                     title="Toggle Note Mode"
                 >
                     Toggle Candidate Mode: {{ isNoteMode ? 'ON' : 'OFF' }}
                 </button>
-                <button @click="generateCandidates">Populate Candidates</button>
+                <button v-if="!candidatesPopulated" @click="generateCandidates">Populate Candidates</button>
+                <template v-else>
+                    <button @click="getHint" :disabled="isPaused || isGameOver" class="hint-btn">Get Hint</button>
+                    <button @click="generateCandidates">Refresh Candidates</button>
+                </template>
             </div>
         </div>
 
         <div v-if="message" class="message">{{ message }}</div>
+
+        <!-- Hint Panel -->
+        <div v-if="hintResult" class="hint-panel">
+            <div class="hint-header">
+                <strong>{{ hintResult.strategyName }}</strong>
+                <span class="hint-difficulty">(Difficulty: {{ hintResult.difficulty.toFixed(1) }})</span>
+            </div>
+            <p class="hint-description">{{ hintResult.description }}</p>
+            <div class="hint-actions">
+                <button v-if="hintResult.eliminations.length > 0" @click="applyHint" class="apply-btn">
+                    Apply ({{ hintResult.eliminations.length }} elimination{{ hintResult.eliminations.length > 1 ? 's' : '' }})
+                </button>
+                <button @click="dismissHint" class="dismiss-btn">Dismiss</button>
+            </div>
+        </div>
     </div>
   </div>
 </template>
@@ -1015,7 +1145,7 @@ onUnmounted(() => {
 .cell::after {
     content: '';
     position: absolute;
-    top: 4px; left: 4px; right: 4px; bottom: 4px;
+    top: 1px; left: 1px; right: 1px; bottom: 1px;
     pointer-events: none;
     z-index: 10;
     border: 0px dotted #555;
@@ -1270,5 +1400,93 @@ button.active {
 }
 .delete-btn:hover {
     background-color: #c0392b;
+}
+
+/* Hint System Styles */
+.hint-btn {
+    background-color: #9b59b6;
+}
+.hint-btn:hover {
+    background-color: #8e44ad;
+}
+.hint-btn:disabled {
+    background-color: #bdc3c7;
+    cursor: not-allowed;
+}
+
+.hint-panel {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    border: 2px solid #9b59b6;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-top: 1rem;
+    max-width: 450px;
+    width: 100%;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.hint-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    color: #fff;
+}
+
+.hint-difficulty {
+    font-size: 0.85rem;
+    color: #bdc3c7;
+}
+
+.hint-description {
+    margin: 0.5rem 0;
+    color: #ecf0f1;
+    font-size: 0.95rem;
+    line-height: 1.4;
+}
+
+.hint-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.apply-btn {
+    background-color: #27ae60;
+}
+.apply-btn:hover {
+    background-color: #219a52;
+}
+
+.dismiss-btn {
+    background-color: #7f8c8d;
+}
+.dismiss-btn:hover {
+    background-color: #6c7a7b;
+}
+
+/* Cell highlight classes for hints */
+.hint-primary {
+    background-color: rgba(39, 174, 96, 0.4) !important;
+}
+
+.hint-secondary {
+    background-color: rgba(241, 196, 15, 0.3) !important;
+}
+
+.hint-elimination {
+    background-color: rgba(231, 76, 60, 0.3) !important;
+}
+
+/* Candidate highlight classes */
+.candidate-highlight-primary {
+    color: #27ae60 !important;
+    font-weight: bold;
+}
+
+.candidate-highlight-elimination {
+    color: #e74c3c !important;
+    text-decoration: line-through;
+    font-weight: bold;
 }
 </style>

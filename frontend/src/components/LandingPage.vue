@@ -9,6 +9,7 @@ const gameType = ref('standard')
 const fileInput = ref<HTMLInputElement | null>(null)
 const isLoading = ref(false)
 const errorMsg = ref('')
+const isDragging = ref(false)
 
 const startGame = () => {
   emit('start-game', { difficulty: difficulty.value, size: size.value, gameType: gameType.value })
@@ -19,12 +20,12 @@ const triggerUpload = () => {
     fileInput.value?.click()
 }
 
-const handleFileUpload = async (event: Event) => {
-    const input = event.target as HTMLInputElement
-    if (!input.files || input.files.length === 0) return
-
-    const file = input.files[0]
-    if (!file) return
+const processFile = async (file: File) => {
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+        errorMsg.value = 'Please upload a JPEG, PNG, or WebP image.'
+        return
+    }
 
     isLoading.value = true
     errorMsg.value = ''
@@ -46,17 +47,12 @@ const handleFileUpload = async (event: Event) => {
 
         const data = await response.json()
         if (data.board) {
-            // Check if board size matches selected size, or adjust?
-            // For now, assume 9x9 as that's what backend returns currently
-            // Ideally we should detect size or enforce 9x9.
-            // But let's just pass it.
             emit('create-custom', {
                 size: 9,
                 gameType: gameType.value,
                 initialBoard: data.board,
                 initialCages: data.cages
             })
-            // Reset selection to standard/9 just in case
             size.value = 9
         }
     } catch (e: any) {
@@ -64,9 +60,41 @@ const handleFileUpload = async (event: Event) => {
         errorMsg.value = "Failed to process image. Please try again."
     } finally {
         isLoading.value = false
-        // Reset input
-        if (fileInput.value) fileInput.value.value = ''
     }
+}
+
+const handleFileUpload = async (event: Event) => {
+    const input = event.target as HTMLInputElement
+    if (!input.files || input.files.length === 0) return
+
+    const file = input.files[0]
+    if (!file) return
+
+    await processFile(file)
+
+    if (fileInput.value) fileInput.value.value = ''
+}
+
+const handleDragOver = (event: DragEvent) => {
+    event.preventDefault()
+    isDragging.value = true
+}
+
+const handleDragLeave = (event: DragEvent) => {
+    event.preventDefault()
+    isDragging.value = false
+}
+
+const handleDrop = async (event: DragEvent) => {
+    event.preventDefault()
+    isDragging.value = false
+
+    const files = event.dataTransfer?.files
+    if (!files || files.length === 0) return
+
+    const file = files[0]
+    if (!file) return
+    await processFile(file)
 }
 </script>
 
@@ -145,7 +173,13 @@ const handleFileUpload = async (event: Event) => {
             </button>
         </div>
 
-        <div class="upload-section">
+        <div
+            class="upload-section"
+            :class="{ 'drag-over': isDragging }"
+            @dragover="handleDragOver"
+            @dragleave="handleDragLeave"
+            @drop="handleDrop"
+        >
             <input
                 type="file"
                 ref="fileInput"
@@ -153,13 +187,14 @@ const handleFileUpload = async (event: Event) => {
                 @change="handleFileUpload"
                 style="display: none"
             />
-            <button
-                class="upload-btn"
-                @click="triggerUpload"
-                :disabled="isLoading"
-            >
-                {{ isLoading ? 'Processing...' : 'Upload Puzzle from Image' }}
-            </button>
+            <div class="drop-zone" @click="triggerUpload">
+                <div v-if="isLoading" class="upload-status">Processing...</div>
+                <div v-else-if="isDragging" class="upload-status">Drop image here</div>
+                <div v-else class="upload-prompt">
+                    <span class="upload-icon">+</span>
+                    <span>Drop image here or click to upload</span>
+                </div>
+            </div>
             <div v-if="errorMsg" class="error-msg">{{ errorMsg }}</div>
         </div>
 
@@ -271,24 +306,48 @@ label {
     margin-top: 0.5rem;
 }
 
-.upload-btn {
+.drop-zone {
     width: 100%;
     padding: 0.8rem;
-    background: #8e44ad;
-    color: white;
-    border: none;
+    background: #f8f4fa;
+    border: 2px dashed #8e44ad;
     border-radius: 4px;
     cursor: pointer;
+    text-align: center;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+
+.drop-zone:hover {
+    background: #f0e6f4;
+    border-color: #732d91;
+}
+
+.upload-section.drag-over .drop-zone {
+    background: #e8d8f0;
+    border-color: #5b2575;
+    border-style: solid;
+}
+
+.upload-prompt {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    color: #8e44ad;
     font-size: 1rem;
 }
 
-.upload-btn:hover {
-    background: #732d91;
+.upload-icon {
+    font-size: 1.2rem;
+    font-weight: bold;
+    line-height: 1;
 }
 
-.upload-btn:disabled {
-    background: #bfaac7;
-    cursor: not-allowed;
+.upload-status {
+    color: #8e44ad;
+    font-weight: 500;
 }
 
 .error-msg {
