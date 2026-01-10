@@ -1,0 +1,165 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Run tests
+        run: go test ./...
+
+  build-backend:
+    runs-on: ubuntu-latest
+    needs: test-backend
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build
+        run: GOOS=linux GOARCH=amd64 go build -o sudoku-server .
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-binary
+          path: backend/sudoku-server
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+  deploy:
+    runs-on: self-hosted
+    needs: [build-backend, build-frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    env:
+      SERVER: "192.168.86.227"
+      APP_DIR: "/opt/sudoku"
+      SERVICE_NAME: "sudoku"
+      EXTRACTION_SERVICE_NAME: "sudoku-extraction"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download backend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-binary
+          path: backend
+
+      - name: Download frontend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      - name: Make backend binary executable
+        run: chmod +x backend/sudoku-server
+
+      - name: Stop services
+        run: |
+          ssh $SERVER "sudo systemctl stop $SERVICE_NAME || true"
+          ssh $SERVER "sudo systemctl stop $EXTRACTION_SERVICE_NAME || true"
+
+      - name: Prepare remote directory
+        run: |
+          ssh $SERVER "sudo mkdir -p $APP_DIR && sudo chown \$(whoami) $APP_DIR"
+          ssh $SERVER "mkdir -p $APP_DIR/extraction_service"
+
+      - name: Transfer files
+        run: |
+          scp backend/sudoku-server $SERVER:$APP_DIR/
+          scp -r frontend/dist $SERVER:$APP_DIR/
+          scp extraction_service/app.py $SERVER:$APP_DIR/extraction_service/
+          scp extraction_service/requirements.txt $SERVER:$APP_DIR/extraction_service/
+
+      - name: Setup environment variables
+        run: |
+          ssh $SERVER "echo GOOGLE_API_KEY=\$(cat /home/cody/gemini-api-key) > $APP_DIR/config.env"
+
+      - name: Setup Python environment
+        run: |
+          ssh $SERVER "cd $APP_DIR/extraction_service && python3 -m venv venv"
+          ssh $SERVER "cd $APP_DIR/extraction_service && ./venv/bin/pip install --upgrade pip"
+          ssh $SERVER "cd $APP_DIR/extraction_service && ./venv/bin/pip install -r requirements.txt"
+
+      - name: Setup systemd services
+        run: |
+          scp deployment/sudoku.service $SERVER:/tmp/
+          scp deployment/sudoku-extraction.service $SERVER:/tmp/
+          ssh $SERVER "sudo mv /tmp/sudoku.service /etc/systemd/system/"
+          ssh $SERVER "sudo mv /tmp/sudoku-extraction.service /etc/systemd/system/"
+          ssh $SERVER "sudo systemctl daemon-reload"
+          ssh $SERVER "sudo systemctl enable $SERVICE_NAME"
+          ssh $SERVER "sudo systemctl enable $EXTRACTION_SERVICE_NAME"
+
+      - name: Start extraction service
+        run: |
+          ssh $SERVER "sudo systemctl start $EXTRACTION_SERVICE_NAME"
+          sleep 5
+
+      - name: Verify extraction service
+        run: |
+          ssh $SERVER "curl -s http://127.0.0.1:5001/health" | grep -q "ok" || echo "Warning: Extraction service may not be running properly"
+
+      - name: Start main service
+        run: |
+          ssh $SERVER "sudo systemctl start $SERVICE_NAME"
+
+      - name: Configure nginx
+        run: |
+          scp deployment/sudoku.seavey.dev.conf $SERVER:/tmp/
+          ssh $SERVER "sudo mv /tmp/sudoku.seavey.dev.conf /etc/nginx/sites-available/sudoku.seavey.dev.conf"
+          ssh $SERVER "sudo ln -sf /etc/nginx/sites-available/sudoku.seavey.dev.conf /etc/nginx/sites-enabled/"
+          ssh $SERVER "sudo nginx -t && sudo systemctl reload nginx"
+
+      - name: Verify deployment
+        run: |
+          echo "Checking service status..."
+          ssh $SERVER "sudo systemctl status $SERVICE_NAME --no-pager | head -5"
+          ssh $SERVER "sudo systemctl status $EXTRACTION_SERVICE_NAME --no-pager | head -5"
