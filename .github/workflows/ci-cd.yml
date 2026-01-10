@@ -118,6 +118,15 @@ jobs:
           scp extraction_service/app.py $SERVER:$APP_DIR/extraction_service/
           scp extraction_service/requirements.txt $SERVER:$APP_DIR/extraction_service/
 
+      - name: Deploy ML models
+        run: |
+          echo "Deploying ML models to production..."
+          ssh $SERVER "mkdir -p $APP_DIR/extraction_service/models"
+          scp extraction_service/models/digit_cnn.pth $SERVER:$APP_DIR/extraction_service/models/
+          scp extraction_service/models/boundary_classifier_rf.pkl $SERVER:$APP_DIR/extraction_service/models/
+          scp extraction_service/models/boundary_scaler.pkl $SERVER:$APP_DIR/extraction_service/models/
+          echo "ML models deployed successfully"
+
       - name: Setup environment variables
         run: |
           ssh $SERVER "echo GOOGLE_API_KEY=\$(cat /home/cody/gemini-api-key) > $APP_DIR/config.env"
@@ -145,7 +154,14 @@ jobs:
 
       - name: Verify extraction service
         run: |
+          echo "Checking extraction service health endpoint..."
           ssh $SERVER "curl -s http://127.0.0.1:5001/health" | grep -q "ok" || echo "Warning: Extraction service may not be running properly"
+
+          echo "Verifying ML models are deployed..."
+          ssh $SERVER "test -f $APP_DIR/extraction_service/models/digit_cnn.pth || { echo 'ERROR: digit_cnn.pth not found'; exit 1; }"
+          ssh $SERVER "test -f $APP_DIR/extraction_service/models/boundary_classifier_rf.pkl || { echo 'ERROR: boundary_classifier_rf.pkl not found'; exit 1; }"
+          ssh $SERVER "test -f $APP_DIR/extraction_service/models/boundary_scaler.pkl || { echo 'ERROR: boundary_scaler.pkl not found'; exit 1; }"
+          echo "All ML models verified on production server"
 
       - name: Start main service
         run: |

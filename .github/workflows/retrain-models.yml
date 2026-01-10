@@ -1,0 +1,74 @@
+name: Retrain ML Models
+
+on:
+  workflow_dispatch:  # Manual trigger
+    inputs:
+      model_type:
+        description: 'Which model to retrain'
+        required: true
+        type: choice
+        options:
+          - boundary-classifier
+          - both
+
+  schedule:
+    # Weekly retraining on Sunday at 2 AM UTC (optional - can be enabled later)
+    # - cron: '0 2 * * 0'
+
+jobs:
+  retrain-boundary-classifier:
+    if: inputs.model_type == 'boundary-classifier' || inputs.model_type == 'both' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: extraction_service/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          cd extraction_service
+          pip install -r requirements.txt
+
+      - name: Extract boundary training data
+        run: |
+          cd extraction_service
+          python extract_boundary_training_data.py
+
+      - name: Train boundary classifier
+        run: |
+          cd extraction_service
+          python train_boundary_classifier.py
+
+      - name: Upload retrained model
+        uses: actions/upload-artifact@v4
+        with:
+          name: boundary-classifier-retrained
+          path: |
+            extraction_service/models/boundary_classifier_rf.pkl
+            extraction_service/models/boundary_scaler.pkl
+          retention-days: 30
+
+      - name: Create release with model
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: model-boundary-${{ github.run_number }}
+          files: |
+            extraction_service/models/boundary_classifier_rf.pkl
+            extraction_service/models/boundary_scaler.pkl
+          body: |
+            Retrained boundary classifier Random Forest model
+            - Training date: ${{ github.run_id }}
+            - Trigger: ${{ github.event_name }}
+            - Model type: ${{ inputs.model_type }}
+
+            ## Usage
+            To deploy this model:
+            1. Download the artifacts
+            2. Replace files in `extraction_service/models/`
+            3. Commit and push to trigger deployment
