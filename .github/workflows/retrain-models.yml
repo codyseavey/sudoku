@@ -63,40 +63,6 @@ jobs:
           echo "Boundary classifier training complete"
           ls -lh models/boundary_classifier_rf.pkl models/boundary_scaler.pkl
 
-      - name: Commit and push retrained models
-        run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
-
-          # Check if models were updated
-          if [[ -n $(git status --porcelain extraction_service/models/) ]]; then
-            echo "Models were updated, committing changes..."
-            git add extraction_service/models/*.pth extraction_service/models/*.pkl
-
-            # Create commit message based on what was trained
-            if [[ "${{ inputs.model_type }}" == "both" ]] || [[ "${{ github.event_name }}" == "schedule" ]]; then
-              COMMIT_MSG="chore: Retrain all ML models (digit CNN + boundary classifier)"
-            elif [[ "${{ inputs.model_type }}" == "digit-cnn" ]]; then
-              COMMIT_MSG="chore: Retrain digit CNN model"
-            else
-              COMMIT_MSG="chore: Retrain boundary classifier model"
-            fi
-
-            git commit -m "$COMMIT_MSG
-
-            Automated model retraining via GitHub Actions
-            - Run: ${{ github.run_number }}
-            - Trigger: ${{ github.event_name }}
-            - Model type: ${{ inputs.model_type }}
-
-            Co-Authored-By: GitHub Actions <actions@github.com>"
-
-            git push
-            echo "Models committed and pushed to main"
-          else
-            echo "No model changes detected"
-          fi
-
       - name: Upload retrained models
         uses: actions/upload-artifact@v4
         with:
@@ -120,4 +86,4 @@ jobs:
           ls -lh extraction_service/models/ >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Models have been committed to main and will be deployed automatically." >> $GITHUB_STEP_SUMMARY
+          echo "Models are available as artifacts. To deploy, download and commit them to main." >> $GITHUB_STEP_SUMMARY

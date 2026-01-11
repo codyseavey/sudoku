@@ -79,6 +79,10 @@ extraction_service/training_data/train.txt
 extraction_service/training_data/val.txt
 extraction_service/training_data/metadata.json
 
+# ML models (trained during CI/CD, deployed via artifacts)
+extraction_service/models/*.pth
+extraction_service/models/*.pkl
+
 # ML training history (regenerated each training run)
 extraction_service/models/*_training_history.json
 extraction_service/models/training_history.json
