@@ -91,6 +91,13 @@ jobs:
           cd extraction_service
           pip install -r requirements.txt
 
+      - name: Extract CNN training data from test images
+        run: |
+          cd extraction_service
+          echo "Extracting training cells from test_data images..."
+          python extract_training_cells.py
+          echo "Training data extraction complete"
+
       - name: Train Digit CNN
         run: |
           cd extraction_service
