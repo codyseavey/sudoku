@@ -12,9 +12,9 @@ on:
           - boundary-classifier
           - both
 
-  schedule:
-    # Weekly retraining on Sunday at 2 AM UTC (optional - can be enabled later)
-    # - cron: '0 2 * * 0'
+  # Uncomment to enable weekly retraining:
+  # schedule:
+  #   - cron: '0 2 * * 0'  # Weekly on Sunday at 2 AM UTC
 
 jobs:
   retrain-models:
