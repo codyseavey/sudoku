@@ -103,8 +103,9 @@ function checkWXYZWing(
       )
     )
 
-    // For WXYZ-Wing, Z should NOT be fully restricted (otherwise it's a naked quad)
-    if (allZsSeeEachOther && cellsWithZ.length === 4) continue
+    // For WXYZ-Wing, Z should NOT be restricted (all Z cells seeing each other)
+    // If Z is restricted, it cannot be the elimination candidate
+    if (allZsSeeEachOther) continue
 
     // Find cells that see ALL instances of Z in the pattern
     const zCells = cellsWithZ.map(c => c.cell)
