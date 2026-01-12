@@ -47,9 +47,24 @@ func TestGenerateKillerDifficulty(t *testing.T) {
 			}
 		}
 	}
-	// Expect few digits (hard puzzles may have some clues depending on cage structure)
-	if filledCountHard > 8 {
-		t.Errorf("Killer Sudoku Hard should have few clues, got %d clues", filledCountHard)
+	// Hard should have fewer clues than medium
+	if filledCountHard == 0 {
+		t.Error("Killer Sudoku Hard should have clues")
+	}
+
+	// Test Insane (should have very few clues)
+	pInsane := GenerateKiller("insane", size)
+	filledCountInsane := 0
+	for r := 0; r < size; r++ {
+		for c := 0; c < size; c++ {
+			if pInsane.Board[r][c] != 0 {
+				filledCountInsane++
+			}
+		}
+	}
+	// Expect very few digits (insane puzzles may have some clues depending on cage structure)
+	if filledCountInsane > 10 {
+		t.Errorf("Killer Sudoku Insane should have very few clues, got %d clues", filledCountInsane)
 	}
 }
 

@@ -103,10 +103,10 @@ func Solve(initialBoard Grid, size int) (Grid, bool) {
 	return nil, false
 }
 
-// Generate creates a new valid Sudoku puzzle
+// Generate creates a new valid Sudoku puzzle with technique-based difficulty
 func Generate(difficulty string, size int) Puzzle {
 	gen := Generator{N: size}
-	
+
 	// Configure dimensions
 	if size == 6 {
 		gen.BoxHeight = 2
@@ -118,38 +118,76 @@ func Generate(difficulty string, size int) Puzzle {
 		gen.BoxWidth = 3
 	}
 
+	minHoles, maxHoles := gen.getHolesRange(difficulty)
+	maxAttempts := 50 // Limit attempts to avoid infinite loops
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		var g Grid
+		// Generate a complete valid grid
+		for {
+			g = make(Grid, gen.N)
+			for i := range g {
+				g[i] = make([]int, gen.N)
+			}
+			if gen.fillGrid(g) {
+				break
+			}
+		}
+
+		// Deep copy for solution
+		solution := make(Grid, gen.N)
+		for i := range g {
+			solution[i] = make([]int, gen.N)
+			copy(solution[i], g[i])
+		}
+
+		// Try different hole counts within the range
+		holes := minHoles + rand.Intn(maxHoles-minHoles+1)
+
+		puzzleBoard := make(Grid, gen.N)
+		for i := range g {
+			puzzleBoard[i] = make([]int, gen.N)
+			copy(puzzleBoard[i], g[i])
+		}
+
+		gen.removeDigits(puzzleBoard, holes)
+
+		// Analyze difficulty
+		analysis := AnalyzeDifficulty(puzzleBoard, gen.N)
+
+		// Check if puzzle matches target difficulty
+		if MatchesDifficulty(analysis, difficulty) {
+			return Puzzle{
+				Solution: solution,
+				Board:    puzzleBoard,
+			}
+		}
+	}
+
+	// Fallback: return a puzzle with default hole count if we couldn't find a matching one
 	var g Grid
-	// Retry generation until a valid solution is found
-	// (Should be first try with standard solver, but kept for robustness)
 	for {
 		g = make(Grid, gen.N)
 		for i := range g {
 			g[i] = make([]int, gen.N)
 		}
-
-		// Fill the grid using random backtracking
-		// We shuffle the numbers 1..N at each step to ensure randomness
 		if gen.fillGrid(g) {
 			break
 		}
 	}
 
-	// Deep copy for solution
 	solution := make(Grid, gen.N)
 	for i := range g {
 		solution[i] = make([]int, gen.N)
 		copy(solution[i], g[i])
 	}
 
-	// Determine holes
 	k := gen.getHolesCount(difficulty)
-	
 	puzzleBoard := make(Grid, gen.N)
 	for i := range g {
 		puzzleBoard[i] = make([]int, gen.N)
 		copy(puzzleBoard[i], g[i])
 	}
-	
 	gen.removeDigits(puzzleBoard, k)
 
 	return Puzzle{
@@ -204,11 +242,16 @@ func GenerateKiller(difficulty string, size int) Puzzle {
 	}
 
 	var holes int
-	if difficulty == "hard" {
+	switch difficulty {
+	case "insane":
 		holes = gen.N * gen.N // Try to remove all
-	} else if difficulty == "easy" {
+	case "extreme":
+		holes = gen.N*gen.N - 5 // Remove almost all
+	case "hard":
+		holes = gen.getHolesCount("hard")
+	case "easy":
 		holes = gen.getHolesCount("medium")
-	} else {
+	default: // medium
 		holes = gen.getHolesCount("hard")
 	}
 	
@@ -333,6 +376,10 @@ func (gen *Generator) getHolesCount(difficulty string) int {
 			return 15
 		case "hard":
 			return 25
+		case "extreme":
+			return 28
+		case "insane":
+			return 30
 		default: // medium
 			return 20
 		}
@@ -342,9 +389,48 @@ func (gen *Generator) getHolesCount(difficulty string) int {
 	case "easy":
 		return 40
 	case "hard":
+		return 55
+	case "extreme":
+		return 60
+	case "insane":
 		return 64
 	default: // medium
-		return 50
+		return 48
+	}
+}
+
+// getHolesRange returns min and max holes to try for a difficulty level
+func (gen *Generator) getHolesRange(difficulty string) (int, int) {
+	if gen.N == 6 {
+		switch difficulty {
+		case "easy":
+			return 12, 18
+		case "medium":
+			return 16, 22
+		case "hard":
+			return 20, 26
+		case "extreme":
+			return 24, 28
+		case "insane":
+			return 26, 32
+		default:
+			return 16, 22
+		}
+	}
+	// 9x9
+	switch difficulty {
+	case "easy":
+		return 35, 45
+	case "medium":
+		return 42, 52
+	case "hard":
+		return 48, 58
+	case "extreme":
+		return 54, 62
+	case "insane":
+		return 58, 66
+	default:
+		return 42, 52
 	}
 }
 
