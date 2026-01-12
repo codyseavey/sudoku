@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """
 Train CNN for cage sum recognition (1-45).
+
+Tuned settings for optimal performance:
+- Label smoothing for better generalization
+- Gradient clipping to prevent exploding gradients
+- Data augmentation during training
+- Learning rate warmup
+- Class-weighted loss for imbalanced data
 """
 
 import torch
@@ -12,15 +19,15 @@ import cv2
 import numpy as np
 from pathlib import Path
 import json
-# from tqdm import tqdm  # Not available
 import argparse
 
 class CageSumDataset(Dataset):
     """Dataset for cage sum images."""
 
-    def __init__(self, data_dir, transform=None, label_to_idx=None):
+    def __init__(self, data_dir, transform=None, label_to_idx=None, augment=False):
         self.data_dir = Path(data_dir)
         self.transform = transform
+        self.augment = augment
         self.samples = []
 
         # Build label mapping if not provided
@@ -48,6 +55,18 @@ class CageSumDataset(Dataset):
         print(f"Loaded {len(self.samples)} samples from {data_dir}")
         print(f"Label mapping: {len(self.label_to_idx)} unique labels")
 
+        # Training-time augmentation transforms
+        if augment:
+            self.aug_transform = transforms.Compose([
+                transforms.RandomAffine(
+                    degrees=5,           # Rotation
+                    translate=(0.05, 0.05),  # Translation
+                    scale=(0.95, 1.05),  # Scaling
+                    shear=3              # Shear
+                ),
+                transforms.RandomErasing(p=0.1, scale=(0.02, 0.08)),  # Cutout-style
+            ])
+
     def __len__(self):
         return len(self.samples)
 
@@ -62,6 +81,10 @@ class CageSumDataset(Dataset):
 
         # Convert to tensor
         img = torch.from_numpy(img).unsqueeze(0)  # Add channel dimension
+
+        # Apply training-time augmentation
+        if self.augment and hasattr(self, 'aug_transform'):
+            img = self.aug_transform(img)
 
         if self.transform:
             img = self.transform(img)
@@ -122,8 +145,8 @@ class CageSumCNN(nn.Module):
 
         return x
 
-def train_epoch(model, dataloader, criterion, optimizer, device):
-    """Train for one epoch."""
+def train_epoch(model, dataloader, criterion, optimizer, device, max_grad_norm=1.0):
+    """Train for one epoch with gradient clipping."""
     model.train()
     running_loss = 0.0
     correct = 0
@@ -139,6 +162,10 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
         loss = criterion(outputs, labels)
 
         loss.backward()
+
+        # Gradient clipping to prevent exploding gradients
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+
         optimizer.step()
 
         running_loss += loss.item()
@@ -147,7 +174,7 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
         total += labels.size(0)
         correct += (predicted == labels).sum().item()
 
-        if (batch_idx + 1) % 5 == 0:
+        if (batch_idx + 1) % 10 == 0:
             print(f"  Batch {batch_idx + 1}/{len(dataloader)}: loss={loss.item():.4f}")
 
     epoch_loss = running_loss / len(dataloader)
@@ -205,6 +232,10 @@ def main():
                         default='training_data/cage_sum_cnn',
                         help='Training data directory')
     parser.add_argument('--patience', type=int, default=15, help='Early stopping patience')
+    parser.add_argument('--label-smoothing', type=float, default=0.1,
+                        help='Label smoothing factor (default: 0.1)')
+    parser.add_argument('--no-augment', action='store_true',
+                        help='Disable training-time augmentation')
     args = parser.parse_args()
 
     # Setup
@@ -216,9 +247,12 @@ def main():
     train_dir = base_dir / 'train'
     val_dir = base_dir / 'val'
 
-    # Create datasets (train first to build label mapping)
-    train_dataset = CageSumDataset(train_dir)
-    val_dataset = CageSumDataset(val_dir, label_to_idx=train_dataset.label_to_idx)
+    # Create datasets (train with augmentation, val without)
+    use_augment = not args.no_augment
+    train_dataset = CageSumDataset(train_dir, augment=use_augment)
+    val_dataset = CageSumDataset(val_dir, label_to_idx=train_dataset.label_to_idx, augment=False)
+
+    print(f"Training augmentation: {'enabled' if use_augment else 'disabled'}")
 
     # Create dataloaders
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size,
@@ -241,9 +275,13 @@ def main():
     # Compute class weights for balanced loss
     class_weights = compute_class_weights(train_dataset).to(device)
     print(f"Using class-weighted loss (inverse frequency weighting)")
+    print(f"Label smoothing: {args.label_smoothing}")
 
-    # Loss and optimizer with weight decay for regularization
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    # Loss with label smoothing and class weights for better generalization
+    criterion = nn.CrossEntropyLoss(
+        weight=class_weights,
+        label_smoothing=args.label_smoothing
+    )
     optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
 
     # Cosine annealing scheduler with warm restarts

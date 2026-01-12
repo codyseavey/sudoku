@@ -269,8 +269,8 @@ func (gen *Generator) growCage(solution Grid, visited [][]bool, r, c int) Cage {
 	values := make(map[int]bool)
 	values[solution[r][c]] = true
 
-	// Determine random target size (e.g., 2 to 5)
-	targetSize := rand.Intn(4) + 2
+	// Determine random target size (e.g., 2 to 9 for training data)
+	targetSize := rand.Intn(8) + 2
 	if gen.N == 6 {
 		targetSize = rand.Intn(3) + 2
 	}

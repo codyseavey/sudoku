@@ -2,6 +2,11 @@
 """
 Prepare cage sum crops for CNN training.
 Extracts the top-left corner region where cage sums appear.
+
+Key requirements:
+- At least 2 samples of each label in training data
+- At least 1 sample of each label in validation data
+- Consistent preprocessing with warping/normalization
 """
 
 import os
@@ -10,6 +15,11 @@ import numpy as np
 from pathlib import Path
 import json
 import random
+
+# Minimum samples required per split
+MIN_TRAIN_SAMPLES = 2
+MIN_VAL_SAMPLES = 1
+TARGET_SAMPLES_PER_LABEL = 30  # Target for augmentation
 
 def extract_cage_sum_region(cell_img, crop_h_ratio=0.40, crop_w_ratio=0.65):
     """Extract the top-left corner region where cage sum appears.
@@ -36,12 +46,74 @@ def extract_cage_sum_region(cell_img, crop_h_ratio=0.40, crop_w_ratio=0.65):
 
     return cropped
 
-def preprocess_for_cnn(crop, target_size=(64, 64)):
-    """Preprocess crop for CNN input.
+
+def normalize_crop(crop):
+    """Apply consistent normalization to make crops more uniform.
+
+    Args:
+        crop: Input grayscale crop
+
+    Returns:
+        Normalized crop with consistent lighting/contrast
+    """
+    if len(crop.shape) == 3:
+        crop = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+
+    # Apply adaptive histogram equalization for consistent contrast
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
+    normalized = clahe.apply(crop)
+
+    # Light denoising while preserving edges
+    normalized = cv2.bilateralFilter(normalized, 5, 50, 50)
+
+    return normalized
+
+
+def deskew_crop(crop):
+    """Deskew a crop to correct for rotation.
+
+    Args:
+        crop: Input grayscale crop
+
+    Returns:
+        Deskewed crop
+    """
+    if len(crop.shape) == 3:
+        crop = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+
+    # Find moments to determine skew angle
+    coords = np.column_stack(np.where(crop < 200))
+    if len(coords) < 10:
+        return crop
+
+    # Use PCA-like approach via moments
+    moments = cv2.moments(255 - crop)
+    if moments['mu02'] == 0:
+        return crop
+
+    # Calculate skew angle
+    skew = moments['mu11'] / moments['mu02']
+    angle = np.degrees(np.arctan(skew))
+
+    # Limit correction to small angles
+    if abs(angle) > 15:
+        return crop
+
+    # Apply rotation to deskew
+    h, w = crop.shape
+    M = cv2.getRotationMatrix2D((w // 2, h // 2), angle, 1.0)
+    deskewed = cv2.warpAffine(crop, M, (w, h), borderValue=255)
+
+    return deskewed
+
+def preprocess_for_cnn(crop, target_size=(64, 64), apply_deskew=True, apply_normalize=True):
+    """Preprocess crop for CNN input with consistent normalization.
 
     Args:
         crop: Cage sum crop
         target_size: Target size for CNN (64x64)
+        apply_deskew: Whether to apply deskewing
+        apply_normalize: Whether to apply normalization
 
     Returns:
         Preprocessed image ready for CNN
@@ -52,17 +124,27 @@ def preprocess_for_cnn(crop, target_size=(64, 64)):
     else:
         gray = crop.copy()
 
-    # Resize to target size
+    # Apply deskewing for consistency
+    if apply_deskew:
+        gray = deskew_crop(gray)
+
+    # Apply normalization for consistent contrast/lighting
+    if apply_normalize:
+        gray = normalize_crop(gray)
+
+    # Resize to target size with high-quality interpolation
     resized = cv2.resize(gray, target_size, interpolation=cv2.INTER_AREA)
 
-    # Light CLAHE for contrast
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    # Final CLAHE for contrast enhancement
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(resized)
 
     return enhanced
 
 def augment_crop(crop, target_count=30):
     """Create augmented versions of a crop with enhanced variations.
+
+    Includes warping transforms for better generalization.
 
     Args:
         crop: Input crop to augment
@@ -78,14 +160,14 @@ def augment_crop(crop, target_count=30):
     h, w = crop.shape
     augmented = [crop.copy()]  # Original
 
-    # Rotation variations (more angles)
-    for angle in [-5, -4, -3, -2, 2, 3, 4, 5]:
+    # Rotation variations (more angles for better coverage)
+    for angle in [-6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6]:
         M = cv2.getRotationMatrix2D((w//2, h//2), angle, 1.0)
         rotated = cv2.warpAffine(crop, M, (w, h), borderValue=255)
         augmented.append(rotated)
 
     # Scaling variations
-    for scale in [0.90, 0.95, 1.05, 1.10]:
+    for scale in [0.88, 0.92, 0.96, 1.04, 1.08, 1.12]:
         scaled = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
         # Crop/pad to original size
         if scaled.shape[0] > h:
@@ -109,8 +191,13 @@ def augment_crop(crop, target_count=30):
         adjusted = cv2.convertScaleAbs(crop, alpha=1.0, beta=beta)
         augmented.append(adjusted)
 
+    # Contrast variations
+    for alpha in [0.8, 0.9, 1.1, 1.2]:
+        adjusted = cv2.convertScaleAbs(crop, alpha=alpha, beta=0)
+        augmented.append(adjusted)
+
     # Gaussian noise
-    for sigma in [5, 10]:
+    for sigma in [3, 5, 8, 12]:
         noisy = crop.copy().astype(np.float32)
         noise = np.random.normal(0, sigma, crop.shape)
         noisy = np.clip(noisy + noise, 0, 255).astype(np.uint8)
@@ -126,16 +213,44 @@ def augment_crop(crop, target_count=30):
     sharpened = cv2.filter2D(crop, -1, kernel)
     augmented.append(sharpened)
 
-    # Perspective transforms (slight skew)
-    for skew in [0.05, -0.05]:
+    # Perspective transforms (warping for consistency training)
+    # Horizontal skew
+    for skew in [0.03, 0.06, -0.03, -0.06]:
         pts1 = np.array([[0,0], [w,0], [0,h], [w,h]], dtype=np.float32)
         pts2 = np.array([[0,0], [w,0], [int(w*skew),h], [w-int(w*skew),h]], dtype=np.float32)
         M = cv2.getPerspectiveTransform(pts1, pts2)
         warped = cv2.warpPerspective(crop, M, (w, h), borderValue=255)
         augmented.append(warped)
 
+    # Vertical skew
+    for skew in [0.03, 0.06, -0.03, -0.06]:
+        pts1 = np.array([[0,0], [w,0], [0,h], [w,h]], dtype=np.float32)
+        pts2 = np.array([[int(h*skew),0], [w-int(h*skew),0], [0,h], [w,h]], dtype=np.float32)
+        M = cv2.getPerspectiveTransform(pts1, pts2)
+        warped = cv2.warpPerspective(crop, M, (w, h), borderValue=255)
+        augmented.append(warped)
+
+    # Corner perspective warps (simulate camera angle)
+    for dx, dy in [(3, 3), (-3, -3), (3, -3), (-3, 3), (5, 2), (-5, -2)]:
+        pts1 = np.array([[0,0], [w,0], [0,h], [w,h]], dtype=np.float32)
+        pts2 = np.array([[dx,dy], [w-dx,dy], [0,h], [w,h]], dtype=np.float32)
+        M = cv2.getPerspectiveTransform(pts1, pts2)
+        warped = cv2.warpPerspective(crop, M, (w, h), borderValue=255)
+        augmented.append(warped)
+
+    # Affine transforms (shear)
+    for shear in [0.05, -0.05, 0.08, -0.08]:
+        M = np.array([[1, shear, 0], [0, 1, 0]], dtype=np.float32)
+        sheared = cv2.warpAffine(crop, M, (w, h), borderValue=255)
+        augmented.append(sheared)
+
+    # Elastic distortion (subtle)
+    for strength in [2, 4]:
+        distorted = elastic_distortion(crop, alpha=strength, sigma=3)
+        augmented.append(distorted)
+
     # Combinations of transforms: Rotation + brightness
-    for angle, beta in [(-3, 10), (3, -10), (-2, 20), (2, -20)]:
+    for angle, beta in [(-3, 15), (3, -15), (-2, 25), (2, -25), (-4, 10), (4, -10)]:
         M = cv2.getRotationMatrix2D((w//2, h//2), angle, 1.0)
         rotated = cv2.warpAffine(crop, M, (w, h), borderValue=255)
         combined = cv2.convertScaleAbs(rotated, alpha=1.0, beta=beta)
@@ -143,7 +258,8 @@ def augment_crop(crop, target_count=30):
 
     # Return exactly target_count samples (randomly sample if too many)
     if len(augmented) > target_count:
-        indices = np.random.choice(len(augmented), target_count, replace=False)
+        # Always include original
+        indices = [0] + list(np.random.choice(range(1, len(augmented)), target_count - 1, replace=False))
         return [augmented[i] for i in indices]
     elif len(augmented) < target_count:
         # Repeat augmentations to reach target
@@ -151,6 +267,34 @@ def augment_crop(crop, target_count=30):
             augmented.append(augmented[np.random.randint(1, len(augmented))])
 
     return augmented
+
+
+def elastic_distortion(image, alpha=2, sigma=3):
+    """Apply elastic distortion to image.
+
+    Args:
+        image: Input image
+        alpha: Distortion strength
+        sigma: Smoothness of distortion
+
+    Returns:
+        Distorted image
+    """
+    h, w = image.shape[:2]
+
+    # Generate random displacement fields
+    dx = cv2.GaussianBlur((np.random.rand(h, w) * 2 - 1).astype(np.float32), (0, 0), sigma) * alpha
+    dy = cv2.GaussianBlur((np.random.rand(h, w) * 2 - 1).astype(np.float32), (0, 0), sigma) * alpha
+
+    # Create meshgrid
+    x, y = np.meshgrid(np.arange(w), np.arange(h))
+    map_x = (x + dx).astype(np.float32)
+    map_y = (y + dy).astype(np.float32)
+
+    # Apply remapping
+    distorted = cv2.remap(image, map_x, map_y, cv2.INTER_LINEAR, borderValue=255)
+
+    return distorted
 
 def main():
     """Prepare cage sum training data from extracted crops."""
@@ -278,46 +422,110 @@ def main():
 
     print(f"Saved {saved_count} processed crops to {output_dir}")
 
-    # Create train/val split
-    print("\nCreating train/val split (80/20)...")
+    # Create train/val split with guaranteed minimum samples per label
+    print(f"\nCreating train/val split (ensuring min {MIN_TRAIN_SAMPLES} train, {MIN_VAL_SAMPLES} val per label)...")
     train_dir = output_dir / 'train'
     val_dir = output_dir / 'val'
+
+    # Clear existing directories
+    import shutil
+    if train_dir.exists():
+        shutil.rmtree(train_dir)
+    if val_dir.exists():
+        shutil.rmtree(val_dir)
     train_dir.mkdir(exist_ok=True)
     val_dir.mkdir(exist_ok=True)
 
     train_count = 0
     val_count = 0
+    insufficient_labels = []
 
     for label, crops in data_by_label.items():
-        # Shuffle
-        random.seed(42)  # For reproducibility
-        random.shuffle(crops)
+        # Shuffle for randomness
+        random.seed(42 + label)  # Seed per label for reproducibility
+        shuffled = crops.copy()
+        random.shuffle(shuffled)
 
-        # Split
-        split_idx = int(len(crops) * 0.8)
-        train_crops = crops[:split_idx]
-        val_crops = crops[split_idx:]
+        total = len(shuffled)
+        min_required = MIN_TRAIN_SAMPLES + MIN_VAL_SAMPLES
+
+        if total < min_required:
+            print(f"  Warning: Label {label} has only {total} samples (need {min_required})")
+            insufficient_labels.append(label)
+            # Split what we have, prioritizing training
+            if total >= MIN_TRAIN_SAMPLES:
+                train_crops = shuffled[:MIN_TRAIN_SAMPLES]
+                val_crops = shuffled[MIN_TRAIN_SAMPLES:]
+            else:
+                train_crops = shuffled
+                val_crops = []
+        else:
+            # Guarantee minimum val samples first
+            val_crops = shuffled[:MIN_VAL_SAMPLES]
+            remaining = shuffled[MIN_VAL_SAMPLES:]
+
+            # Guarantee minimum train samples
+            train_crops = remaining[:MIN_TRAIN_SAMPLES]
+            remaining = remaining[MIN_TRAIN_SAMPLES:]
+
+            # Split remaining 80/20
+            if remaining:
+                extra_train = int(len(remaining) * 0.8)
+                train_crops.extend(remaining[:extra_train])
+                val_crops.extend(remaining[extra_train:])
 
         # Save train
-        train_label_dir = train_dir / f"label_{label:02d}"
-        train_label_dir.mkdir(exist_ok=True)
+        if train_crops:
+            train_label_dir = train_dir / f"label_{label:02d}"
+            train_label_dir.mkdir(exist_ok=True)
 
-        for idx, crop_data in enumerate(train_crops):
-            filename = f"{label:02d}_{idx:04d}.png"
-            cv2.imwrite(str(train_label_dir / filename), crop_data['image'])
-            train_count += 1
+            for idx, crop_data in enumerate(train_crops):
+                filename = f"{label:02d}_{idx:04d}.png"
+                cv2.imwrite(str(train_label_dir / filename), crop_data['image'])
+                train_count += 1
 
         # Save val
-        val_label_dir = val_dir / f"label_{label:02d}"
-        val_label_dir.mkdir(exist_ok=True)
+        if val_crops:
+            val_label_dir = val_dir / f"label_{label:02d}"
+            val_label_dir.mkdir(exist_ok=True)
 
-        for idx, crop_data in enumerate(val_crops):
-            filename = f"{label:02d}_{idx:04d}.png"
-            cv2.imwrite(str(val_label_dir / filename), crop_data['image'])
-            val_count += 1
+            for idx, crop_data in enumerate(val_crops):
+                filename = f"{label:02d}_{idx:04d}.png"
+                cv2.imwrite(str(val_label_dir / filename), crop_data['image'])
+                val_count += 1
 
     print(f"Train: {train_count} samples")
     print(f"Val: {val_count} samples")
+
+    if insufficient_labels:
+        print(f"\n⚠️  Labels with insufficient samples: {insufficient_labels}")
+        print(f"   These labels need at least {MIN_TRAIN_SAMPLES + MIN_VAL_SAMPLES} samples total")
+
+    # Count samples per label in train/val
+    train_per_label = {}
+    val_per_label = {}
+    for label in data_by_label.keys():
+        train_label_dir = train_dir / f"label_{label:02d}"
+        val_label_dir = val_dir / f"label_{label:02d}"
+        train_per_label[label] = len(list(train_label_dir.glob('*.png'))) if train_label_dir.exists() else 0
+        val_per_label[label] = len(list(val_label_dir.glob('*.png'))) if val_label_dir.exists() else 0
+
+    # Verify minimum requirements
+    print("\nVerifying minimum sample requirements...")
+    all_ok = True
+    for label in sorted(data_by_label.keys()):
+        t_count = train_per_label.get(label, 0)
+        v_count = val_per_label.get(label, 0)
+        if t_count < MIN_TRAIN_SAMPLES or v_count < MIN_VAL_SAMPLES:
+            print(f"  ❌ Label {label:2d}: train={t_count}, val={v_count}")
+            all_ok = False
+        else:
+            print(f"  ✓  Label {label:2d}: train={t_count}, val={v_count}")
+
+    if all_ok:
+        print("\n✅ All labels meet minimum requirements!")
+    else:
+        print("\n⚠️  Some labels do not meet minimum requirements!")
 
     # Save metadata
     metadata = {
@@ -325,8 +533,13 @@ def main():
         'num_classes': len(data_by_label),
         'train_samples': train_count,
         'val_samples': val_count,
+        'min_train_per_label': MIN_TRAIN_SAMPLES,
+        'min_val_per_label': MIN_VAL_SAMPLES,
         'samples_per_label': {k: len(v) for k, v in data_by_label.items()},
+        'train_per_label': train_per_label,
+        'val_per_label': val_per_label,
         'augmented_labels': augmented_labels,
+        'insufficient_labels': insufficient_labels,
         'target_size': [64, 64]
     }
 

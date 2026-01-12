@@ -10,7 +10,8 @@ on:
         options:
           - digit-cnn
           - boundary-classifier
-          - both
+          - cage-sum-cnn
+          - all
 
   # Uncomment to enable weekly retraining:
   # schedule:
@@ -38,8 +39,15 @@ jobs:
           cd extraction_service
           pip install -r requirements.txt
 
+      - name: Extract training cells
+        if: inputs.model_type == 'digit-cnn' || inputs.model_type == 'all' || github.event_name == 'schedule'
+        run: |
+          cd extraction_service
+          echo "Extracting training cells..."
+          python extract_training_cells.py
+
       - name: Train Digit CNN
-        if: inputs.model_type == 'digit-cnn' || inputs.model_type == 'both' || github.event_name == 'schedule'
+        if: inputs.model_type == 'digit-cnn' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
           cd extraction_service
           echo "Training Digit CNN classifier..."
@@ -48,20 +56,45 @@ jobs:
           ls -lh models/digit_cnn.pth
 
       - name: Extract boundary training data
-        if: inputs.model_type == 'boundary-classifier' || inputs.model_type == 'both' || github.event_name == 'schedule'
+        if: inputs.model_type == 'boundary-classifier' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
           cd extraction_service
           echo "Extracting boundary training data..."
           python extract_boundary_training_data.py
 
       - name: Train Boundary Classifier
-        if: inputs.model_type == 'boundary-classifier' || inputs.model_type == 'both' || github.event_name == 'schedule'
+        if: inputs.model_type == 'boundary-classifier' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
           cd extraction_service
           echo "Training boundary classifier..."
           python train_boundary_classifier.py
           echo "Boundary classifier training complete"
           ls -lh models/boundary_classifier_rf.pkl models/boundary_scaler.pkl
+
+      - name: Extract cage sum training data
+        if: inputs.model_type == 'cage-sum-cnn' || inputs.model_type == 'all' || github.event_name == 'schedule'
+        run: |
+          cd extraction_service
+          echo "Extracting cage sum training data..."
+          python extract_cage_sum_training_data.py
+          echo "Cage sum data extraction complete"
+
+      - name: Prepare cage sum CNN data
+        if: inputs.model_type == 'cage-sum-cnn' || inputs.model_type == 'all' || github.event_name == 'schedule'
+        run: |
+          cd extraction_service
+          echo "Preparing cage sum CNN data..."
+          python prepare_cage_sum_cnn_data.py
+          echo "Cage sum CNN data preparation complete"
+
+      - name: Train Cage Sum CNN
+        if: inputs.model_type == 'cage-sum-cnn' || inputs.model_type == 'all' || github.event_name == 'schedule'
+        run: |
+          cd extraction_service
+          echo "Training Cage Sum CNN..."
+          python train_cage_sum_cnn.py --epochs 30 --batch-size 32
+          echo "Cage Sum CNN training complete"
+          ls -lh models/cage_sum_cnn.pth
 
       - name: Upload retrained models
         uses: actions/upload-artifact@v4
@@ -71,6 +104,7 @@ jobs:
             extraction_service/models/digit_cnn.pth
             extraction_service/models/boundary_classifier_rf.pkl
             extraction_service/models/boundary_scaler.pkl
+            extraction_service/models/cage_sum_cnn.pth
           retention-days: 30
 
       - name: Create summary
