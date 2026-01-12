@@ -141,24 +141,41 @@ const handleDrop = async (event: DragEvent) => {
 
         <div class="setting-group">
             <label>Difficulty:</label>
-            <div class="options">
-                <button 
-                    :class="{ active: difficulty === 'easy' }" 
+            <div class="options difficulty-options">
+                <button
+                    :class="{ active: difficulty === 'easy' }"
                     @click="difficulty = 'easy'"
+                    title="Solvable with basic techniques only (singles)"
                 >
                     Easy
                 </button>
-                <button 
-                    :class="{ active: difficulty === 'medium' }" 
+                <button
+                    :class="{ active: difficulty === 'medium' }"
                     @click="difficulty = 'medium'"
+                    title="May require pairs and pointing techniques"
                 >
                     Medium
                 </button>
-                <button 
-                    :class="{ active: difficulty === 'hard' }" 
+                <button
+                    :class="{ active: difficulty === 'hard' }"
                     @click="difficulty = 'hard'"
+                    title="Requires intermediate techniques (X-Wing, Swordfish)"
                 >
                     Hard
+                </button>
+                <button
+                    :class="{ active: difficulty === 'extreme' }"
+                    @click="difficulty = 'extreme'"
+                    title="Requires advanced techniques (Y-Wing, Skyscraper)"
+                >
+                    Extreme
+                </button>
+                <button
+                    :class="{ active: difficulty === 'insane' }"
+                    @click="difficulty = 'insane'"
+                    title="Requires multiple of the hardest techniques"
+                >
+                    Insane
                 </button>
             </div>
         </div>
@@ -262,6 +279,23 @@ label {
     color: white;
     border-color: #42b983;
     font-weight: bold;
+}
+
+.difficulty-options {
+    flex-wrap: wrap;
+}
+
+.difficulty-options button {
+    flex: 0 1 calc(33.33% - 0.35rem);
+    min-width: 0;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.3rem;
+}
+
+.difficulty-options button:nth-child(4),
+.difficulty-options button:nth-child(5) {
+    flex: 0 1 calc(50% - 0.25rem);
+    margin-top: 0.5rem;
 }
 
 .buttons {
