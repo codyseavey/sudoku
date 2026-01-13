@@ -1060,28 +1060,26 @@ onUnmounted(() => {
                     </svg>
                     <span class="btn-text">{{ isNoteMode ? 'Notes ON' : 'Notes' }}</span>
                 </button>
-                <button v-if="!candidatesPopulated" @click="generateCandidates" title="Populate Candidates">
+                <button @click="generateCandidates" :class="['fill-notes-btn', { 'hidden-btn': candidatesPopulated }]" title="Populate Candidates">
                     <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
                         <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
                     </svg>
                     <span class="btn-text">Fill Notes</span>
                 </button>
-                <template v-else>
-                    <button @click="getHint" :disabled="isPaused || isGameOver" class="hint-btn" title="Get Hint">
-                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7z"/>
-                        </svg>
-                        <span class="btn-text">Hint</span>
-                    </button>
-                    <button @click="generateCandidates" title="Refresh Candidates">
-                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M23 4v6h-6M1 20v-6h6"/>
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                        </svg>
-                        <span class="btn-text">Refresh</span>
-                    </button>
-                </template>
+                <button @click="getHint" :disabled="isPaused || isGameOver" :class="['hint-btn', { 'hidden-btn': !candidatesPopulated }]" title="Get Hint">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7z"/>
+                    </svg>
+                    <span class="btn-text">Hint</span>
+                </button>
+                <button @click="generateCandidates" :class="['refresh-btn', { 'hidden-btn': !candidatesPopulated }]" title="Refresh Candidates">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 4v6h-6M1 20v-6h6"/>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                    <span class="btn-text">Refresh</span>
+                </button>
             </div>
         </div>
 
@@ -1393,6 +1391,11 @@ button.active {
     color: #dad4f6;
 }
 
+/* Hidden button class for stable layout */
+.hidden-btn {
+    display: none;
+}
+
 .game-area {
     display: flex;
     flex-direction: column;
@@ -1618,6 +1621,18 @@ button.active {
 
     .secondary-controls {
         margin-top: 4px;
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    .secondary-controls .fill-notes-btn {
+        grid-column: span 2;
+    }
+
+    .secondary-controls .hidden-btn {
+        display: inline-flex;
+        visibility: hidden;
+        pointer-events: none;
     }
 
     .number-pad {
