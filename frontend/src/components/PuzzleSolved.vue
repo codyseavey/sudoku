@@ -58,13 +58,26 @@ const emit = defineEmits(['new-game', 'back-to-menu'])
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1.5rem;
-    margin-top: 2rem;
+    gap: 1rem;
+    margin-top: 1rem;
     color: #dad4f6;
+    width: 100%;
+    padding: 0 0.5rem;
+    box-sizing: border-box;
 }
 
 .header {
     text-align: center;
+}
+
+.header h1 {
+    font-size: 1.8rem;
+    margin: 0 0 0.5rem 0;
+}
+
+.header p {
+    font-size: 1rem;
+    margin: 0;
 }
 
 .grid {
@@ -74,7 +87,7 @@ const emit = defineEmits(['new-game', 'back-to-menu'])
   border: 3px solid #000;
   gap: 0;
   width: 100%;
-  max-width: 300px; /* Smaller preview */
+  max-width: 280px;
 }
 
 .row {
@@ -88,7 +101,7 @@ const emit = defineEmits(['new-game', 'back-to-menu'])
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   color: #000;
   font-weight: bold;
 }
@@ -114,23 +127,87 @@ const emit = defineEmits(['new-game', 'back-to-menu'])
 
 .buttons {
     display: flex;
-    gap: 1rem;
+    gap: 0.75rem;
+    width: 100%;
+    max-width: 280px;
 }
 
 button {
-    padding: 1rem 1.5rem;
-    font-size: 1.1rem;
+    padding: 0.85rem 1rem;
+    font-size: 1rem;
     cursor: pointer;
     border: none;
     border-radius: 4px;
     color: white;
+    flex: 1;
+    min-height: 48px;
+    touch-action: manipulation;
 }
 
 .menu-btn {
     background-color: #34495e;
 }
 
+.menu-btn:hover {
+    background-color: #2c3e50;
+}
+
 .new-btn {
     background-color: #42b983;
+}
+
+.new-btn:hover {
+    background-color: #3aa876;
+}
+
+/* Mobile styles */
+@media (max-width: 480px) {
+    .solved-container {
+        gap: 0.75rem;
+        margin-top: 0.5rem;
+        padding: 0 0.25rem;
+    }
+
+    .header h1 {
+        font-size: 1.5rem;
+    }
+
+    .header p {
+        font-size: 0.9rem;
+    }
+
+    .grid {
+        max-width: min(280px, calc(100vw - 2rem));
+    }
+
+    .cell {
+        font-size: 0.9rem;
+    }
+
+    .buttons {
+        max-width: min(280px, calc(100vw - 2rem));
+        gap: 0.5rem;
+    }
+
+    button {
+        padding: 0.7rem 0.5rem;
+        font-size: 0.9rem;
+        min-height: 44px;
+    }
+}
+
+/* Very small screens */
+@media (max-width: 360px) {
+    .header h1 {
+        font-size: 1.3rem;
+    }
+
+    .cell {
+        font-size: 0.8rem;
+    }
+
+    button {
+        font-size: 0.85rem;
+    }
 }
 </style>

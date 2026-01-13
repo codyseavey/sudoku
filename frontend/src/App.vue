@@ -167,10 +167,30 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   font-family: Arial, sans-serif;
-  margin-top: 2rem;
+  margin-top: 1rem;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0 0.5rem;
+  min-height: calc(100vh - 2rem);
+  min-height: calc(100dvh - 2rem); /* Dynamic viewport height */
 }
 
 h1 {
   color: #dad4f6;
+  margin: 0.5rem 0;
+}
+
+@media (max-width: 480px) {
+  .container {
+    margin-top: 0.5rem;
+    padding: 0 0.25rem;
+    min-height: calc(100vh - 1rem);
+    min-height: calc(100dvh - 1rem);
+  }
+
+  h1 {
+    font-size: 1.8rem;
+  }
 }
 </style>

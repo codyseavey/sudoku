@@ -1013,27 +1013,74 @@ onUnmounted(() => {
 
             <!-- Normal Game Controls -->
             <div class="controls" v-else>
-                <button @click="startNewGame">New Game</button>
-                <button @click="isPaused ? resumeTimer() : pauseTimer()">
-                    {{ isPaused ? 'Resume' : 'Pause' }}
+                <button @click="startNewGame" :title="'New Game'">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    <span class="btn-text">New</span>
                 </button>
-                <button @click="undo" :disabled="isPaused || isGameOver">Undo</button>
-                <button @click="shareGame">Share</button>
-                <button @click="showSolution" class="secondary">Show Solution</button>
+                <button @click="isPaused ? resumeTimer() : pauseTimer()" :title="isPaused ? 'Resume' : 'Pause'">
+                    <svg v-if="isPaused" class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7z"/>
+                    </svg>
+                    <svg v-else class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+                    </svg>
+                    <span class="btn-text">{{ isPaused ? 'Resume' : 'Pause' }}</span>
+                </button>
+                <button @click="undo" :disabled="isPaused || isGameOver" title="Undo">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 10h10a5 5 0 0 1 5 5v2M3 10l5-5M3 10l5 5"/>
+                    </svg>
+                    <span class="btn-text">Undo</span>
+                </button>
+                <button @click="shareGame" title="Share">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                    </svg>
+                    <span class="btn-text">Share</span>
+                </button>
+                <button @click="showSolution" class="secondary" title="Show Solution">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    <span class="btn-text">Solve</span>
+                </button>
             </div>
-            
+
             <div class="controls secondary-controls" v-if="!isDefiningCustom">
                 <button
                     @click="isNoteMode = !isNoteMode"
                     :class="{ 'active': isNoteMode }"
-                    title="Toggle Note Mode"
+                    title="Toggle Candidate Mode (Pencil)"
                 >
-                    Toggle Candidate Mode: {{ isNoteMode ? 'ON' : 'OFF' }}
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+                    </svg>
+                    <span class="btn-text">{{ isNoteMode ? 'Notes ON' : 'Notes' }}</span>
                 </button>
-                <button v-if="!candidatesPopulated" @click="generateCandidates">Populate Candidates</button>
+                <button v-if="!candidatesPopulated" @click="generateCandidates" title="Populate Candidates">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                        <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                    </svg>
+                    <span class="btn-text">Fill Notes</span>
+                </button>
                 <template v-else>
-                    <button @click="getHint" :disabled="isPaused || isGameOver" class="hint-btn">Get Hint</button>
-                    <button @click="generateCandidates">Refresh Candidates</button>
+                    <button @click="getHint" :disabled="isPaused || isGameOver" class="hint-btn" title="Get Hint">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7z"/>
+                        </svg>
+                        <span class="btn-text">Hint</span>
+                    </button>
+                    <button @click="generateCandidates" title="Refresh Candidates">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6M1 20v-6h6"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                        <span class="btn-text">Refresh</span>
+                    </button>
                 </template>
             </div>
         </div>
@@ -1278,18 +1325,32 @@ onUnmounted(() => {
 }
 
 button {
-    padding: 10px 15px;
-    font-size: 0.9rem;
+    padding: 8px 12px;
+    font-size: 0.85rem;
     cursor: pointer;
     background-color: #42b983;
     color: white;
     border: none;
     border-radius: 4px;
-    min-width: 80px;
+    min-width: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
 }
 
 button:hover {
     background-color: #3aa876;
+}
+
+.btn-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.btn-text {
+    white-space: nowrap;
 }
 
 button.primary-action {
@@ -1488,5 +1549,206 @@ button.active {
     color: #e74c3c !important;
     text-decoration: line-through;
     font-weight: bold;
+}
+
+/* ========== Mobile Responsive Styles ========== */
+@media (max-width: 480px) {
+    .board-container {
+        padding: 0;
+    }
+
+    .timer-display {
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .grid {
+        max-width: calc(100vw - 16px);
+        margin-bottom: 10px;
+    }
+
+    .value-input {
+        font-size: 1.2rem;
+    }
+
+    .cage-sum {
+        font-size: 0.55rem;
+    }
+
+    .candidate-cell {
+        font-size: 6px;
+    }
+
+    .candidates-grid.killer-mode {
+        padding-top: 12px;
+        padding-left: 3px;
+        padding-right: 3px;
+        padding-bottom: 3px;
+    }
+
+    .controls-container {
+        gap: 6px;
+        width: 100%;
+        max-width: calc(100vw - 16px);
+    }
+
+    .controls {
+        gap: 4px;
+    }
+
+    /* Hide button text on mobile, show only icons */
+    .btn-text {
+        display: none;
+    }
+
+    .btn-icon {
+        width: 20px;
+        height: 20px;
+    }
+
+    button {
+        padding: 10px;
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    button.secondary {
+        background-color: #e67e22;
+    }
+
+    .secondary-controls {
+        margin-top: 4px;
+    }
+
+    .number-pad {
+        max-width: calc(100vw - 16px);
+        gap: 4px;
+    }
+
+    .pad-btn {
+        padding: 12px 0;
+        font-size: 1.1rem;
+        min-height: 44px;
+    }
+
+    .message {
+        font-size: 0.9rem;
+        padding: 0 8px;
+        text-align: center;
+    }
+
+    .hint-panel {
+        max-width: calc(100vw - 16px);
+        padding: 0.75rem;
+        margin-top: 0.5rem;
+    }
+
+    .hint-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+
+    .hint-description {
+        font-size: 0.85rem;
+    }
+
+    .hint-actions {
+        flex-wrap: wrap;
+    }
+
+    .hint-actions button {
+        flex: 1;
+        min-width: 80px;
+    }
+
+    .header-status h3 {
+        font-size: 1.1rem;
+        margin: 0;
+    }
+
+    .header-status p {
+        font-size: 0.85rem;
+        margin: 0.25rem 0;
+    }
+
+    .incorrect-mark {
+        font-size: 1.2rem;
+    }
+
+    .paused-overlay h2 {
+        font-size: 1.5rem;
+    }
+
+    .paused-overlay button {
+        padding: 12px 24px;
+    }
+
+    .killer-controls {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .cage-actions {
+        flex-wrap: wrap;
+        width: 100%;
+        justify-content: center;
+    }
+
+    .instruction {
+        font-size: 0.8rem;
+        width: 100%;
+        text-align: center;
+    }
+}
+
+/* Small mobile screens (very small phones) */
+@media (max-width: 360px) {
+    .timer-display {
+        font-size: 1.3rem;
+    }
+
+    .value-input {
+        font-size: 1rem;
+    }
+
+    .candidate-cell {
+        font-size: 5px;
+    }
+
+    .btn-icon {
+        width: 18px;
+        height: 18px;
+    }
+
+    button {
+        padding: 8px;
+        min-width: 40px;
+        min-height: 40px;
+    }
+
+    .pad-btn {
+        padding: 10px 0;
+        font-size: 1rem;
+    }
+}
+
+/* Tablet and larger phone landscape */
+@media (min-width: 481px) and (max-width: 768px) {
+    .grid {
+        max-width: 400px;
+    }
+
+    .controls {
+        gap: 8px;
+    }
+
+    button {
+        padding: 8px 10px;
+    }
+
+    .btn-text {
+        font-size: 0.8rem;
+    }
 }
 </style>
