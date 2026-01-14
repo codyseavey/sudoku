@@ -28,21 +28,19 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-          cache-dependency-path: extraction_service/requirements.txt
-
-      - name: Install dependencies
+      - name: Setup Python virtual environment
         run: |
           cd extraction_service
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Extract training cells
         if: inputs.model_type == 'digit-cnn' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
           cd extraction_service
+          source venv/bin/activate
           echo "Extracting training cells..."
           python extract_training_cells.py
 
@@ -50,6 +48,7 @@ jobs:
         if: inputs.model_type == 'digit-cnn' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
           cd extraction_service
+          source venv/bin/activate
           echo "Training Digit CNN classifier..."
           python train_digit_cnn.py --epochs 20 --batch-size 32
           echo "Digit CNN training complete"
@@ -59,6 +58,7 @@ jobs:
         if: inputs.model_type == 'boundary-classifier' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
           cd extraction_service
+          source venv/bin/activate
           echo "Extracting boundary training data..."
           python extract_boundary_training_data.py
 
@@ -66,6 +66,7 @@ jobs:
         if: inputs.model_type == 'boundary-classifier' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
           cd extraction_service
+          source venv/bin/activate
           echo "Training boundary classifier..."
           python train_boundary_classifier.py
           echo "Boundary classifier training complete"
@@ -75,6 +76,7 @@ jobs:
         if: inputs.model_type == 'cage-sum-cnn' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
           cd extraction_service
+          source venv/bin/activate
           echo "Extracting cage sum training data..."
           python extract_cage_sum_training_data.py
           echo "Cage sum data extraction complete"
@@ -83,6 +85,7 @@ jobs:
         if: inputs.model_type == 'cage-sum-cnn' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
           cd extraction_service
+          source venv/bin/activate
           echo "Preparing cage sum CNN data..."
           python prepare_cage_sum_cnn_data.py
           echo "Cage sum CNN data preparation complete"
@@ -91,6 +94,7 @@ jobs:
         if: inputs.model_type == 'cage-sum-cnn' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
           cd extraction_service
+          source venv/bin/activate
           echo "Training Cage Sum CNN..."
           python train_cage_sum_cnn.py --epochs 30 --batch-size 32
           echo "Cage Sum CNN training complete"
