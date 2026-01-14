@@ -1313,6 +1313,8 @@ onUnmounted(() => {
     flex-direction: column;
     gap: 10px;
     margin-bottom: 10px;
+    width: 100%;
+    max-width: 450px;
 }
 
 .controls {
@@ -1320,6 +1322,24 @@ onUnmounted(() => {
     gap: 10px;
     justify-content: center;
     flex-wrap: wrap; /* Handle smaller screens */
+}
+
+.secondary-controls {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+}
+
+.secondary-controls .fill-notes-btn {
+    grid-column: span 2;
+}
+
+.secondary-controls .hint-btn {
+    grid-column: span 2;
+}
+
+.secondary-controls .refresh-btn {
+    grid-column: span 1;
 }
 
 button {
@@ -1391,9 +1411,10 @@ button.active {
     color: #dad4f6;
 }
 
-/* Hidden button class for stable layout */
+/* Hidden button class for stable layout - use visibility to preserve space */
 .hidden-btn {
-    display: none;
+    visibility: hidden;
+    pointer-events: none;
 }
 
 .game-area {
@@ -1621,18 +1642,20 @@ button.active {
 
     .secondary-controls {
         margin-top: 4px;
-        display: grid;
         grid-template-columns: 1fr 1fr 1fr;
+        gap: 4px;
     }
 
     .secondary-controls .fill-notes-btn {
         grid-column: span 2;
     }
 
-    .secondary-controls .hidden-btn {
-        display: inline-flex;
-        visibility: hidden;
-        pointer-events: none;
+    .secondary-controls .hint-btn {
+        grid-column: span 2;
+    }
+
+    .secondary-controls .refresh-btn {
+        grid-column: span 1;
     }
 
     .number-pad {
