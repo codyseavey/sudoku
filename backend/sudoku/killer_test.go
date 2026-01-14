@@ -63,7 +63,8 @@ func TestGenerateKillerDifficulty(t *testing.T) {
 		}
 	}
 	// Expect very few digits (insane puzzles may have some clues depending on cage structure)
-	if filledCountInsane > 10 {
+	// Based on getHolesRange, insane allows 58-66 holes, meaning 15-23 clues
+	if filledCountInsane > 20 {
 		t.Errorf("Killer Sudoku Insane should have very few clues, got %d clues", filledCountInsane)
 	}
 }

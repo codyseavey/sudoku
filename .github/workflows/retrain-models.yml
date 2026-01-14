@@ -22,6 +22,10 @@ jobs:
     runs-on: self-hosted
     permissions:
       contents: write  # Required to push commits
+    defaults:
+      run:
+        shell: bash
+        working-directory: extraction_service
 
     steps:
       - uses: actions/checkout@v4
@@ -30,16 +34,16 @@ jobs:
 
       - name: Setup Python virtual environment
         run: |
-          cd extraction_service
-          python3 -m venv venv
+          rm -rf venv
+          python3.11 -m venv venv
           source venv/bin/activate
+          python --version
           pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Extract training cells
         if: inputs.model_type == 'digit-cnn' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
-          cd extraction_service
           source venv/bin/activate
           echo "Extracting training cells..."
           python extract_training_cells.py
@@ -47,7 +51,6 @@ jobs:
       - name: Train Digit CNN
         if: inputs.model_type == 'digit-cnn' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
-          cd extraction_service
           source venv/bin/activate
           echo "Training Digit CNN classifier..."
           python train_digit_cnn.py --epochs 20 --batch-size 32
@@ -57,7 +60,6 @@ jobs:
       - name: Extract boundary training data
         if: inputs.model_type == 'boundary-classifier' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
-          cd extraction_service
           source venv/bin/activate
           echo "Extracting boundary training data..."
           python extract_boundary_training_data.py
@@ -65,7 +67,6 @@ jobs:
       - name: Train Boundary Classifier
         if: inputs.model_type == 'boundary-classifier' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
-          cd extraction_service
           source venv/bin/activate
           echo "Training boundary classifier..."
           python train_boundary_classifier.py
@@ -75,7 +76,6 @@ jobs:
       - name: Extract cage sum training data
         if: inputs.model_type == 'cage-sum-cnn' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
-          cd extraction_service
           source venv/bin/activate
           echo "Extracting cage sum training data..."
           python extract_cage_sum_training_data.py
@@ -84,7 +84,6 @@ jobs:
       - name: Prepare cage sum CNN data
         if: inputs.model_type == 'cage-sum-cnn' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
-          cd extraction_service
           source venv/bin/activate
           echo "Preparing cage sum CNN data..."
           python prepare_cage_sum_cnn_data.py
@@ -93,7 +92,6 @@ jobs:
       - name: Train Cage Sum CNN
         if: inputs.model_type == 'cage-sum-cnn' || inputs.model_type == 'all' || github.event_name == 'schedule'
         run: |
-          cd extraction_service
           source venv/bin/activate
           echo "Training Cage Sum CNN..."
           python train_cage_sum_cnn.py --epochs 30 --batch-size 32
@@ -121,7 +119,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Model Files" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          ls -lh extraction_service/models/ >> $GITHUB_STEP_SUMMARY
+          ls -lh models/ >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Models are available as artifacts. To deploy, download and commit them to main." >> $GITHUB_STEP_SUMMARY

@@ -113,20 +113,24 @@ jobs:
     runs-on: self-hosted
     needs: [test-backend, validate-test-data, check-changes]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.check-changes.outputs.test_data == 'true'
+    defaults:
+      run:
+        shell: bash
+        working-directory: extraction_service
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Python virtual environment
         run: |
-          cd extraction_service
-          python3 -m venv venv
+          rm -rf venv
+          python3.11 -m venv venv
           source venv/bin/activate
+          python --version
           pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Extract CNN training data from test images
         run: |
-          cd extraction_service
           source venv/bin/activate
           echo "Extracting training cells from test_data images..."
           python extract_training_cells.py
@@ -134,7 +138,6 @@ jobs:
 
       - name: Train Digit CNN
         run: |
-          cd extraction_service
           source venv/bin/activate
           echo "Training Digit CNN classifier..."
           python train_digit_cnn.py --epochs 20 --batch-size 32
@@ -142,14 +145,12 @@ jobs:
 
       - name: Extract boundary training data
         run: |
-          cd extraction_service
           source venv/bin/activate
           echo "Extracting boundary training data..."
           python extract_boundary_training_data.py
 
       - name: Train Boundary Classifier
         run: |
-          cd extraction_service
           source venv/bin/activate
           echo "Training boundary classifier..."
           python train_boundary_classifier.py
@@ -157,7 +158,6 @@ jobs:
 
       - name: Extract cage sum training data
         run: |
-          cd extraction_service
           source venv/bin/activate
           echo "Extracting cage sum training data..."
           python extract_cage_sum_training_data.py
@@ -165,7 +165,6 @@ jobs:
 
       - name: Prepare cage sum CNN data
         run: |
-          cd extraction_service
           source venv/bin/activate
           echo "Preparing cage sum CNN data..."
           python prepare_cage_sum_cnn_data.py
@@ -173,7 +172,6 @@ jobs:
 
       - name: Train Cage Sum CNN
         run: |
-          cd extraction_service
           source venv/bin/activate
           echo "Training Cage Sum CNN..."
           python train_cage_sum_cnn.py --epochs 30 --batch-size 32
@@ -192,7 +190,7 @@ jobs:
       - name: Display model info
         run: |
           echo "Retrained ML Models:"
-          ls -lh extraction_service/models/
+          ls -lh models/
 
   deploy:
     runs-on: self-hosted
