@@ -256,6 +256,7 @@ jobs:
           scp backend/sudoku-server $SERVER:$APP_DIR/
           scp -r frontend/dist $SERVER:$APP_DIR/
           scp extraction_service/app.py $SERVER:$APP_DIR/extraction_service/
+          scp extraction_service/digit_classifier.py $SERVER:$APP_DIR/extraction_service/
           scp extraction_service/requirements.txt $SERVER:$APP_DIR/extraction_service/
 
       - name: Deploy ML models
