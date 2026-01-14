@@ -110,7 +110,7 @@ jobs:
           path: frontend/dist
 
   retrain-models:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [test-backend, validate-test-data, check-changes]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.check-changes.outputs.test_data == 'true'
     steps:
