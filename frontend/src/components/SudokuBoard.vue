@@ -1331,7 +1331,7 @@ onUnmounted(() => {
 }
 
 .secondary-controls .fill-notes-btn {
-    grid-column: span 2;
+    grid-column: span 3;
 }
 
 .secondary-controls .hint-btn {
@@ -1411,10 +1411,9 @@ button.active {
     color: #dad4f6;
 }
 
-/* Hidden button class for stable layout - use visibility to preserve space */
+/* Hidden button class - removes from layout when not needed */
 .hidden-btn {
-    visibility: hidden;
-    pointer-events: none;
+    display: none;
 }
 
 .game-area {
@@ -1642,12 +1641,12 @@ button.active {
 
     .secondary-controls {
         margin-top: 4px;
-        grid-template-columns: 1fr 1fr 1fr;
+        grid-template-columns: repeat(4, 1fr);
         gap: 4px;
     }
 
     .secondary-controls .fill-notes-btn {
-        grid-column: span 2;
+        grid-column: span 3;
     }
 
     .secondary-controls .hint-btn {
