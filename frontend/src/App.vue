@@ -167,13 +167,12 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   font-family: Arial, sans-serif;
-  margin-top: 1rem;
+  padding-top: 1rem;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  padding: 0 0.5rem;
-  min-height: calc(100vh - 2rem);
-  min-height: calc(100dvh - 2rem); /* Dynamic viewport height */
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
 }
 
 h1 {
@@ -183,10 +182,9 @@ h1 {
 
 @media (max-width: 480px) {
   .container {
-    margin-top: 0.5rem;
-    padding: 0 0.25rem;
-    min-height: calc(100vh - 1rem);
-    min-height: calc(100dvh - 1rem);
+    padding-top: 0.5rem;
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
   }
 
   h1 {
