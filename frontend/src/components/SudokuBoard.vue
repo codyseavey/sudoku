@@ -1083,10 +1083,12 @@ onUnmounted(() => {
             </div>
         </div>
 
-        <div v-if="message" class="message">{{ message }}</div>
+        <!-- Feedback area - stable container for messages and hints -->
+        <div class="feedback-area">
+            <div v-if="message" class="message">{{ message }}</div>
 
-        <!-- Hint Panel -->
-        <div v-if="hintResult" class="hint-panel">
+            <!-- Hint Panel -->
+            <div v-if="hintResult" class="hint-panel">
             <div class="hint-header">
                 <strong>{{ hintResult.strategyName }}</strong>
                 <span class="hint-difficulty">(Difficulty: {{ hintResult.difficulty.toFixed(1) }})</span>
@@ -1097,6 +1099,7 @@ onUnmounted(() => {
                     Apply ({{ hintResult.eliminations.length }} elimination{{ hintResult.eliminations.length > 1 ? 's' : '' }})
                 </button>
                 <button @click="dismissHint" class="dismiss-btn">Dismiss</button>
+            </div>
             </div>
         </div>
     </div>
@@ -1405,10 +1408,20 @@ button.active {
     border: 2px solid #dad4f6;
 }
 
+.feedback-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 450px;
+    margin-top: 0.5rem;
+}
+
 .message {
     font-weight: bold;
     font-size: 1.1rem;
     color: #dad4f6;
+    text-align: center;
 }
 
 /* Hidden button class - removes from layout when not needed */
@@ -1503,9 +1516,9 @@ button.active {
     border: 2px solid #9b59b6;
     border-radius: 8px;
     padding: 1rem;
-    margin-top: 1rem;
-    max-width: 450px;
+    margin-top: 0.5rem;
     width: 100%;
+    box-sizing: border-box;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
@@ -1668,16 +1681,17 @@ button.active {
         min-height: 44px;
     }
 
+    .feedback-area {
+        max-width: calc(100vw - 16px);
+    }
+
     .message {
         font-size: 0.9rem;
         padding: 0 8px;
-        text-align: center;
     }
 
     .hint-panel {
-        max-width: calc(100vw - 16px);
         padding: 0.75rem;
-        margin-top: 0.5rem;
     }
 
     .hint-header {

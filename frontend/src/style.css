@@ -32,7 +32,8 @@ html, body {
 
 body {
   display: flex;
-  place-items: center;
+  justify-content: center; /* Center horizontally only */
+  align-items: flex-start; /* Align to top to prevent layout shift */
   min-width: 320px;
   min-height: 100vh;
   min-height: 100dvh; /* Dynamic viewport height for mobile */
