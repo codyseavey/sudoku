@@ -594,14 +594,27 @@ const toggleCageSelectionMode = () => {
     selectedCell.value = null
 }
 
-const onCellClickInCageMode = (r: number, c: number) => {
-    if (!isCageSelectionMode.value) return
-    const key = `${r},${c}`
-    if (currentCageSelection.value.has(key)) {
-        currentCageSelection.value.delete(key)
-    } else {
-        currentCageSelection.value.add(key)
+const onCellClick = (r: number, c: number, event: MouseEvent) => {
+    // Handle cage selection mode
+    if (isCageSelectionMode.value) {
+        const key = `${r},${c}`
+        if (currentCageSelection.value.has(key)) {
+            currentCageSelection.value.delete(key)
+        } else {
+            currentCageSelection.value.add(key)
+        }
+        return
     }
+    
+    // Focus the input inside the clicked cell
+    const cell = (event.currentTarget as HTMLElement)
+    const input = cell.querySelector('input')
+    if (input) {
+        input.focus()
+    }
+    
+    // Update selected cell for number pad input
+    selectedCell.value = { r, c }
 }
 
 const saveCage = () => {
@@ -940,56 +953,58 @@ onUnmounted(() => {
         {{ formatTime(timer) }}
       </div>
 
-      <div class="grid" :class="`size-${size}`" :style="`--board-size: ${size}`">
-        <div class="paused-overlay" v-if="isPaused">
-          <h2>PAUSED</h2>
-          <button class="game-btn primary-action" @click="resumeTimer">Resume</button>
-        </div>
-        <div v-for="(row, rIndex) in board" :key="rIndex" class="row">
-          <div
-            v-for="(cell, cIndex) in row"
-            :key="cIndex"
-            class="cell"
-            :class="[
-              getCageStyle(rIndex, cIndex),
-              { 'cage-selected': currentCageSelection.has(`${rIndex},${cIndex}`) },
-              getHintHighlightClass(rIndex, cIndex)
-            ]"
-            @click="onCellClickInCageMode(rIndex, cIndex)"
-          >
-            <div v-if="getCageSum(rIndex, cIndex)" class="cage-sum">{{ getCageSum(rIndex, cIndex) }}</div>
-            <!-- Main Value Input -->
-            <input 
-              type="text"
-              inputmode="numeric"
-              :value="cell"
-              :readonly="isMobile || isCageSelectionMode"
-              @focus="onFocus(rIndex, cIndex)"
-              @keydown="handleKeydown($event, rIndex, cIndex)"
-              @input="handleInput($event, rIndex, cIndex)"
-              autocomplete="off"
-              class="value-input"
-              :class="{
-                'hidden': cell === null,
-                'fixed': isFixed[rIndex]![cIndex] || isDefiningCustom,
-                'pointer-events-none': isCageSelectionMode
-              }"
-            />
+      <div class="grid-wrapper">
+        <div class="grid" :class="`size-${size}`" :style="`--board-size: ${size}`">
+          <div class="paused-overlay" v-if="isPaused">
+            <h2>PAUSED</h2>
+            <button class="game-btn primary-action" @click="resumeTimer">Resume</button>
+          </div>
+          <div v-for="(row, rIndex) in board" :key="rIndex" class="row">
+            <div
+              v-for="(cell, cIndex) in row"
+              :key="cIndex"
+              class="cell"
+              :class="[
+                getCageStyle(rIndex, cIndex),
+                { 'cage-selected': currentCageSelection.has(`${rIndex},${cIndex}`) },
+                getHintHighlightClass(rIndex, cIndex)
+              ]"
+              @click="onCellClick(rIndex, cIndex, $event)"
+            >
+              <div v-if="getCageSum(rIndex, cIndex)" class="cage-sum">{{ getCageSum(rIndex, cIndex) }}</div>
+              <!-- Main Value Input -->
+              <input 
+                type="text"
+                inputmode="numeric"
+                :value="cell"
+                :readonly="isMobile || isCageSelectionMode"
+                @focus="onFocus(rIndex, cIndex)"
+                @keydown="handleKeydown($event, rIndex, cIndex)"
+                @input="handleInput($event, rIndex, cIndex)"
+                autocomplete="off"
+                class="value-input"
+                :class="{
+                  'empty-value': cell === null,
+                  'fixed': isFixed[rIndex]![cIndex] || isDefiningCustom,
+                  'pointer-events-none': isCageSelectionMode
+                }"
+              />
                 
-            <!-- Incorrect Mark (Red X) -->
-            <div v-if="!isDefiningCustom && !isFixed[rIndex]![cIndex] && cell !== null && cell !== solution[rIndex]![cIndex]" class="incorrect-mark">
-              X
-            </div>
+              <!-- Incorrect Mark (Red X) -->
+              <div v-if="!isDefiningCustom && !isFixed[rIndex]![cIndex] && cell !== null && cell !== solution[rIndex]![cIndex]" class="incorrect-mark">
+                X
+              </div>
 
-            <!-- Candidates Overlay -->
-            <div v-if="!isDefiningCustom && cell === null && candidates[rIndex]![cIndex]!.length > 0" class="candidates-grid" :class="[`size-${size}`, { 'killer-mode': gameType === 'killer' }]">
-              <div
-                v-for="num in size"
-                :key="num"
-                class="candidate-cell"
-                :class="getCandidateHighlightClass(rIndex, cIndex, num)"
-              >
-                {{ candidates[rIndex]![cIndex]!.includes(num) ? num : '' }}
+              <!-- Candidates Overlay -->
+              <div v-if="!isDefiningCustom && cell === null && candidates[rIndex]![cIndex]!.length > 0" class="candidates-grid" :class="[`size-${size}`, { 'killer-mode': gameType === 'killer' }]">
+                <div
+                  v-for="num in size"
+                  :key="num"
+                  class="candidate-cell"
+                  :class="getCandidateHighlightClass(rIndex, cIndex, num)"
+                >
+                  {{ candidates[rIndex]![cIndex]!.includes(num) ? num : '' }}
+                </div>
               </div>
             </div>
           </div>
@@ -1164,19 +1179,35 @@ onUnmounted(() => {
     color: #dad4f6;
 }
 
-/* Grid Layout - Grid container is square via aspect-ratio, rows/cells fill it */
-.grid {
+/* Grid Layout - Using padding-bottom trick for reliable square aspect ratio */
+.grid-wrapper {
   --grid-max-size: 450px;
-  display: flex;
-  flex-direction: column;
   position: relative;
   width: 100%;
   max-width: var(--grid-max-size);
-  aspect-ratio: 1; /* Make grid square - this is the key! */
+  padding-bottom: min(100%, var(--grid-max-size)); /* 1:1 aspect ratio, capped at max-size */
+  margin-bottom: 20px;
+}
+
+.grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: grid;
   background-color: #000;
   border: 3px solid #000;
-  margin-bottom: 20px;
-  gap: 0;
+  box-sizing: border-box;
+}
+
+/* Dynamic grid rows based on board size */
+.grid.size-9 {
+  grid-template-rows: repeat(9, 1fr);
+}
+
+.grid.size-6 {
+  grid-template-rows: repeat(6, 1fr);
 }
 
 :where(.dark, .dark *) .grid {
@@ -1200,23 +1231,24 @@ onUnmounted(() => {
 }
 
 .row {
-  display: flex;
-  flex-direction: row;
-  flex: 1; /* Rows fill grid height equally */
-  min-height: 0; /* Allow shrinking */
+  display: grid;
+}
+
+/* Dynamic grid columns based on board size */
+.grid.size-9 .row {
+  grid-template-columns: repeat(9, 1fr);
+}
+
+.grid.size-6 .row {
+  grid-template-columns: repeat(6, 1fr);
 }
 
 .cell {
-  flex: 1; /* Cells fill row width equally */
-  min-width: 0; /* Allow shrinking */
   position: relative;
   background-color: white;
   border: 1px solid #ccc;
   box-sizing: border-box;
-  /* Center children */
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  overflow: hidden;
 }
 
 :where(.dark, .dark *) .cell {
@@ -1283,30 +1315,34 @@ onUnmounted(() => {
  * actual cell pixel size.
  */
 .value-input {
+  /* Fill the entire cell */
   position: absolute;
-  top: 0;
-  left: 0;
+  inset: 0;
   width: 100%;
   height: 100%;
+  /* Center text horizontally and vertically */
   text-align: center;
-  line-height: 1; /* Let natural line-height handle vertical centering */
-  padding: 0;
-  margin: 0;
+  /* Typography */
   font-size: 1.5rem;
   font-weight: normal;
   color: #007bff;
+  /* Reset form styles */
+  padding: 0;
+  margin: 0;
   border: none;
   outline: none;
   background: transparent;
-  z-index: 10;
-  cursor: default;
-  /* Ensure text baseline is centered within input */
-  vertical-align: middle;
+  /* Ensure it's on top and interactive */
+  z-index: 50;
+  cursor: text;
+  /* Force the input to be interactive */
+  pointer-events: auto;
 }
 
-.value-input.hidden {
+.value-input.empty-value {
     color: transparent;
     cursor: text;
+    caret-color: #007bff; /* Show cursor even when text is transparent */
 }
 
 .value-input.fixed {
