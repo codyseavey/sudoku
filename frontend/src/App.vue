@@ -121,9 +121,13 @@ onMounted(() => {
                 difficulty: decoded.difficulty || 'imported',
                 size: decoded.size || 9,
                 isCustomMode: false,
-                gameType: 'standard'
+                gameType: decoded.gameType || 'standard'
             }
             importedPuzzle.value = decoded
+            // For Killer Sudoku imports, also set the cages
+            if (decoded.cages && decoded.cages.length > 0) {
+                initialCagesState.value = decoded.cages
+            }
             currentView.value = 'game'
             return
         }

@@ -268,6 +268,16 @@ const loadImportedPuzzle = (data: any) => {
     initialBoardState.value = data.board // Keep original for re-sharing
     difficulty.value = data.difficulty
     
+    // Load cages for Killer Sudoku imports
+    if (data.cages && data.cages.length > 0) {
+        cages.value = data.cages
+    } else if (props.initialCages && props.initialCages.length > 0) {
+        // Fallback to prop if cages passed separately
+        cages.value = props.initialCages
+    } else {
+        cages.value = []
+    }
+    
     // Clear history/storage for this "new" game
     resetCandidates()
     history.value = []
@@ -338,11 +348,17 @@ const shareGame = () => {
         return
     }
     
-    const data = {
+    const data: Record<string, any> = {
         board: initialBoardState.value,
         solution: solution.value,
         size: props.size,
-        difficulty: difficulty.value
+        difficulty: difficulty.value,
+        gameType: props.gameType
+    }
+    
+    // Include cages for Killer Sudoku
+    if (props.gameType === 'killer' && cages.value.length > 0) {
+        data.cages = cages.value
     }
     
     const json = JSON.stringify(data)
