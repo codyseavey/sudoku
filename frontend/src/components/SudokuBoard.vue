@@ -1151,10 +1151,12 @@ onUnmounted(() => {
 }
 
 .grid-outer {
+  display: flow-root; /* Create new block formatting context */
   position: relative;
   width: 100%;
   max-width: 450px;
   margin-bottom: 20px;
+  contain: layout style paint; /* Fully contain the grid */
 }
 
 .grid {
@@ -1508,10 +1510,14 @@ button.game-btn.active {
 }
 
 .game-area {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    display: block;
+    text-align: center;
     width: 100%;
+}
+
+.game-area > * {
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .number-pad {
