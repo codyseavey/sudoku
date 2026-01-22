@@ -1158,6 +1158,7 @@ onUnmounted(() => {
   width: 100%;
   max-width: 450px;
   position: relative;
+  z-index: 1; /* Keep grid below controls */
 }
 
 :where(.dark, .dark *) .grid {
@@ -1348,6 +1349,10 @@ onUnmounted(() => {
     margin-bottom: 10px;
     width: 100%;
     max-width: 450px;
+    position: relative;
+    z-index: 10;
+    background-color: red; /* DEBUG - remove after testing */
+    min-height: 100px; /* DEBUG - ensure visible */
 }
 
 .controls {
@@ -1504,6 +1509,7 @@ button.game-btn.active {
     flex-direction: column;
     align-items: center;
     width: 100%;
+    isolation: isolate; /* Create stacking context */
 }
 
 .number-pad {
