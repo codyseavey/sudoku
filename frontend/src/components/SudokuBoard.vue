@@ -1334,15 +1334,14 @@ onUnmounted(() => {
   background: transparent;
   /* Ensure it's on top and interactive */
   z-index: 50;
-  cursor: text;
+  cursor: default;
+  caret-color: transparent; /* Hide cursor, cell highlight is enough */
   /* Force the input to be interactive */
   pointer-events: auto;
 }
 
 .value-input.empty-value {
     color: transparent;
-    cursor: text;
-    caret-color: #007bff; /* Show cursor even when text is transparent */
 }
 
 .value-input.fixed {
