@@ -374,6 +374,8 @@ jobs:
 
       - name: Pull and deploy images
         run: |
+          # Debug: verify we're in the right directory and file exists
+          ssh $SERVER "cd $APP_DIR && pwd && ls -la && cat docker-compose.yml | head -5"
           ssh $SERVER "cd $APP_DIR && IMAGE_TAG=${{ github.sha }} docker compose pull"
           ssh $SERVER "cd $APP_DIR && IMAGE_TAG=${{ github.sha }} docker compose down --remove-orphans || true"
           ssh $SERVER "cd $APP_DIR && IMAGE_TAG=${{ github.sha }} docker compose up -d"
