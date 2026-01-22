@@ -924,12 +924,13 @@ onUnmounted(() => {
         {{ formatTime(timer) }}
       </div>
 
-      <div class="grid" :class="`size-${size}`">
-        <div class="paused-overlay" v-if="isPaused">
-          <h2>PAUSED</h2>
-          <button class="game-btn primary-action" @click="resumeTimer">Resume</button>
-        </div>
-        <div v-for="(row, rIndex) in board" :key="rIndex" class="row">
+      <div class="grid-wrapper">
+        <div class="grid" :class="`size-${size}`">
+          <div class="paused-overlay" v-if="isPaused">
+            <h2>PAUSED</h2>
+            <button class="game-btn primary-action" @click="resumeTimer">Resume</button>
+          </div>
+          <div v-for="(row, rIndex) in board" :key="rIndex" class="row">
           <div
             v-for="(cell, cIndex) in row"
             :key="cIndex"
@@ -978,6 +979,7 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       <div class="controls-container">
@@ -1148,17 +1150,21 @@ onUnmounted(() => {
     color: #dad4f6;
 }
 
+.grid-wrapper {
+  display: block;
+  width: 100%;
+  max-width: 450px;
+  margin-bottom: 20px;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(v-bind(size), 1fr);
   background-color: #000;
   border: 3px solid #000;
-  margin-bottom: 20px;
   gap: 0;
   width: 100%;
-  max-width: 450px;
   position: relative;
-  z-index: 1; /* Keep grid below controls */
 }
 
 :where(.dark, .dark *) .grid {
@@ -1349,10 +1355,6 @@ onUnmounted(() => {
     margin-bottom: 10px;
     width: 100%;
     max-width: 450px;
-    position: relative;
-    z-index: 10;
-    background-color: red; /* DEBUG - remove after testing */
-    min-height: 100px; /* DEBUG - ensure visible */
 }
 
 .controls {
