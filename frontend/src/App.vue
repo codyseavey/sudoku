@@ -160,7 +160,7 @@ onMounted(() => {
     </button>
 
     <div class="flex flex-col items-center w-full max-w-full box-border pt-4 px-2 sm:px-4">
-      <h1 v-if="currentView === 'landing'" class="text-purple-700 dark:text-purple-300 text-4xl sm:text-5xl font-bold my-2">
+      <h1 v-if="currentView === 'landing'" class="text-gray-700 dark:text-gray-100 text-4xl sm:text-5xl font-bold my-2">
         Sudoku
       </h1>
 
