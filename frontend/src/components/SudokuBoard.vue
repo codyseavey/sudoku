@@ -1113,6 +1113,17 @@ onUnmounted(() => {
   align-items: center;
 }
 
+.loading {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #374151;
+  padding: 2rem;
+}
+
+:where(.dark, .dark *) .loading {
+  color: #e5e7eb;
+}
+
 .header-status {
     text-align: center;
     margin-bottom: 1rem;
