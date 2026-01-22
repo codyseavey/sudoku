@@ -100,7 +100,7 @@ const handleDrop = async (event: DragEvent) => {
 
 <template>
   <div class="flex justify-center items-center h-full w-full px-2 box-border">
-    <div class="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-md text-gray-800 dark:text-gray-100 flex flex-col gap-3 sm:gap-4 w-full max-w-md box-border">
+    <div class="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-lg dark:shadow-none dark:border dark:border-gray-700 text-gray-800 dark:text-gray-100 flex flex-col gap-3 sm:gap-4 w-full max-w-md box-border">
       <h2 class="m-0 text-center text-gray-700 dark:text-gray-200 text-xl sm:text-2xl font-semibold">New Game Settings</h2>
         
       <div class="flex flex-col gap-1">

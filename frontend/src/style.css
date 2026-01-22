@@ -26,21 +26,10 @@ a {
   @apply dark:text-blue-300 dark:hover:text-blue-400;
 }
 
-/* Buttons - base styling for non-Tailwind buttons */
+/* Buttons - minimal base styling, let components define their own */
 button {
-  @apply rounded-lg border border-transparent;
-  @apply px-5 py-2.5 text-base font-medium;
   @apply cursor-pointer transition-colors;
-  @apply bg-gray-100 dark:bg-gray-800;
-  @apply text-gray-800 dark:text-gray-100;
-  @apply hover:border-blue-500;
   touch-action: manipulation; /* Prevent double-tap zoom on buttons */
-}
-
-button:focus,
-button:focus-visible {
-  @apply outline-none ring-2 ring-blue-500 ring-offset-2;
-  @apply dark:ring-offset-gray-900;
 }
 
 /* App container */
