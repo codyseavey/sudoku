@@ -1378,10 +1378,10 @@ button {
     padding: 8px 12px;
     font-size: 0.85rem;
     cursor: pointer;
-    background-color: #42b983;
-    color: white;
-    border: none;
-    border-radius: 4px;
+    background-color: #42b983 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 4px !important;
     min-width: auto;
     display: inline-flex;
     align-items: center;
@@ -1390,7 +1390,7 @@ button {
 }
 
 button:hover {
-    background-color: #3aa876;
+    background-color: #3aa876 !important;
 }
 
 .btn-icon {
