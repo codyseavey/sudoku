@@ -938,39 +938,41 @@ onUnmounted(() => {
             ]"
             @click="onCellClickInCageMode(rIndex, cIndex)"
           >
-            <div v-if="getCageSum(rIndex, cIndex)" class="cage-sum">{{ getCageSum(rIndex, cIndex) }}</div>
-            <!-- Main Value Input -->
-            <input 
-              type="text"
-              inputmode="numeric"
-              :value="cell"
-              :readonly="isMobile || isCageSelectionMode"
-              @focus="onFocus(rIndex, cIndex)"
-              @keydown="handleKeydown($event, rIndex, cIndex)"
-              @input="handleInput($event, rIndex, cIndex)"
-              autocomplete="off"
-              class="value-input"
-              :class="{
-                'hidden': cell === null,
-                'fixed': isFixed[rIndex]![cIndex] || isDefiningCustom,
-                'pointer-events-none': isCageSelectionMode
-              }"
-            />
-                
-            <!-- Incorrect Mark (Red X) -->
-            <div v-if="!isDefiningCustom && !isFixed[rIndex]![cIndex] && cell !== null && cell !== solution[rIndex]![cIndex]" class="incorrect-mark">
-              X
-            </div>
+            <div class="cell-inner">
+              <div v-if="getCageSum(rIndex, cIndex)" class="cage-sum">{{ getCageSum(rIndex, cIndex) }}</div>
+              <!-- Main Value Input -->
+              <input 
+                type="text"
+                inputmode="numeric"
+                :value="cell"
+                :readonly="isMobile || isCageSelectionMode"
+                @focus="onFocus(rIndex, cIndex)"
+                @keydown="handleKeydown($event, rIndex, cIndex)"
+                @input="handleInput($event, rIndex, cIndex)"
+                autocomplete="off"
+                class="value-input"
+                :class="{
+                  'hidden': cell === null,
+                  'fixed': isFixed[rIndex]![cIndex] || isDefiningCustom,
+                  'pointer-events-none': isCageSelectionMode
+                }"
+              />
+                  
+              <!-- Incorrect Mark (Red X) -->
+              <div v-if="!isDefiningCustom && !isFixed[rIndex]![cIndex] && cell !== null && cell !== solution[rIndex]![cIndex]" class="incorrect-mark">
+                X
+              </div>
 
-            <!-- Candidates Overlay -->
-            <div v-if="!isDefiningCustom && cell === null && candidates[rIndex]![cIndex]!.length > 0" class="candidates-grid" :class="[`size-${size}`, { 'killer-mode': gameType === 'killer' }]">
-              <div
-                v-for="num in size"
-                :key="num"
-                class="candidate-cell"
-                :class="getCandidateHighlightClass(rIndex, cIndex, num)"
-              >
-                {{ candidates[rIndex]![cIndex]!.includes(num) ? num : '' }}
+              <!-- Candidates Overlay -->
+              <div v-if="!isDefiningCustom && cell === null && candidates[rIndex]![cIndex]!.length > 0" class="candidates-grid" :class="[`size-${size}`, { 'killer-mode': gameType === 'killer' }]">
+                <div
+                  v-for="num in size"
+                  :key="num"
+                  class="candidate-cell"
+                  :class="getCandidateHighlightClass(rIndex, cIndex, num)"
+                >
+                  {{ candidates[rIndex]![cIndex]!.includes(num) ? num : '' }}
+                </div>
               </div>
             </div>
           </div>
@@ -1193,11 +1195,14 @@ onUnmounted(() => {
 .cell {
   display: table-cell;
   background-color: white;
-  position: relative;
   border: 1px solid #ccc;
   box-sizing: border-box;
-  vertical-align: middle;
-  text-align: center;
+  vertical-align: top;
+  padding: 0;
+}
+
+.cell-inner {
+  position: relative;
   width: calc(450px / 9);
   height: calc(450px / 9);
 }
