@@ -1198,6 +1198,8 @@ onUnmounted(() => {
   box-sizing: border-box;
   vertical-align: middle;
   text-align: center;
+  width: calc(450px / 9);
+  height: calc(450px / 9);
 }
 
 :where(.dark, .dark *) .cell {
