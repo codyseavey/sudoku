@@ -1160,8 +1160,8 @@ onUnmounted(() => {
 }
 
 .grid {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(v-bind(size), 1fr);
   background-color: #000;
   border: 3px solid #000;
   gap: 0;
@@ -1189,12 +1189,10 @@ onUnmounted(() => {
 }
 
 .row {
-  display: flex;
-  flex-direction: row;
+  display: contents;
 }
 
 .cell {
-  flex: 1;
   background-color: white;
   aspect-ratio: 1;
   position: relative;
