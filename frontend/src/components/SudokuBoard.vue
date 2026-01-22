@@ -1116,6 +1116,10 @@ onUnmounted(() => {
 .header-status {
     text-align: center;
     margin-bottom: 1rem;
+    color: #374151;
+}
+
+:where(.dark, .dark *) .header-status {
     color: #dad4f6;
 }
 
@@ -1123,9 +1127,13 @@ onUnmounted(() => {
     text-align: center;
     font-size: 2rem;
     font-weight: bold;
-    color: #dad4f6;
+    color: #374151;
     margin-bottom: 1rem;
     font-variant-numeric: tabular-nums;
+}
+
+:where(.dark, .dark *) .timer-display {
+    color: #dad4f6;
 }
 
 .grid {
@@ -1430,8 +1438,12 @@ button.active {
 .message {
     font-weight: bold;
     font-size: 1.1rem;
-    color: #dad4f6;
+    color: #374151;
     text-align: center;
+}
+
+:where(.dark, .dark *) .message {
+    color: #dad4f6;
 }
 
 /* Hidden button class - removes from layout when not needed */
@@ -1499,6 +1511,10 @@ button.active {
 
 .instruction {
     font-size: 0.9rem;
+    color: #374151;
+}
+
+:where(.dark, .dark *) .instruction {
     color: #dad4f6;
 }
 
