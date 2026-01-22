@@ -924,9 +924,12 @@ onUnmounted(() => {
         {{ formatTime(timer) }}
       </div>
 
-      <div class="grid-outer">
-        <div class="grid" :class="`size-${size}`">
-          <div v-for="(row, rIndex) in board" :key="rIndex" class="row">
+      <div class="grid" :class="`size-${size}`" :style="`--board-size: ${size}`">
+        <div class="paused-overlay" v-if="isPaused">
+          <h2>PAUSED</h2>
+          <button class="game-btn primary-action" @click="resumeTimer">Resume</button>
+        </div>
+        <div v-for="(row, rIndex) in board" :key="rIndex" class="row">
           <div
             v-for="(cell, cIndex) in row"
             :key="cIndex"
@@ -938,49 +941,42 @@ onUnmounted(() => {
             ]"
             @click="onCellClickInCageMode(rIndex, cIndex)"
           >
-            <div class="cell-inner">
-              <div v-if="getCageSum(rIndex, cIndex)" class="cage-sum">{{ getCageSum(rIndex, cIndex) }}</div>
-              <!-- Main Value Input -->
-              <input 
-                type="text"
-                inputmode="numeric"
-                :value="cell"
-                :readonly="isMobile || isCageSelectionMode"
-                @focus="onFocus(rIndex, cIndex)"
-                @keydown="handleKeydown($event, rIndex, cIndex)"
-                @input="handleInput($event, rIndex, cIndex)"
-                autocomplete="off"
-                class="value-input"
-                :class="{
-                  'hidden': cell === null,
-                  'fixed': isFixed[rIndex]![cIndex] || isDefiningCustom,
-                  'pointer-events-none': isCageSelectionMode
-                }"
-              />
-                  
-              <!-- Incorrect Mark (Red X) -->
-              <div v-if="!isDefiningCustom && !isFixed[rIndex]![cIndex] && cell !== null && cell !== solution[rIndex]![cIndex]" class="incorrect-mark">
-                X
-              </div>
+            <div v-if="getCageSum(rIndex, cIndex)" class="cage-sum">{{ getCageSum(rIndex, cIndex) }}</div>
+            <!-- Main Value Input -->
+            <input 
+              type="text"
+              inputmode="numeric"
+              :value="cell"
+              :readonly="isMobile || isCageSelectionMode"
+              @focus="onFocus(rIndex, cIndex)"
+              @keydown="handleKeydown($event, rIndex, cIndex)"
+              @input="handleInput($event, rIndex, cIndex)"
+              autocomplete="off"
+              class="value-input"
+              :class="{
+                'hidden': cell === null,
+                'fixed': isFixed[rIndex]![cIndex] || isDefiningCustom,
+                'pointer-events-none': isCageSelectionMode
+              }"
+            />
+                
+            <!-- Incorrect Mark (Red X) -->
+            <div v-if="!isDefiningCustom && !isFixed[rIndex]![cIndex] && cell !== null && cell !== solution[rIndex]![cIndex]" class="incorrect-mark">
+              X
+            </div>
 
-              <!-- Candidates Overlay -->
-              <div v-if="!isDefiningCustom && cell === null && candidates[rIndex]![cIndex]!.length > 0" class="candidates-grid" :class="[`size-${size}`, { 'killer-mode': gameType === 'killer' }]">
-                <div
-                  v-for="num in size"
-                  :key="num"
-                  class="candidate-cell"
-                  :class="getCandidateHighlightClass(rIndex, cIndex, num)"
-                >
-                  {{ candidates[rIndex]![cIndex]!.includes(num) ? num : '' }}
-                </div>
+            <!-- Candidates Overlay -->
+            <div v-if="!isDefiningCustom && cell === null && candidates[rIndex]![cIndex]!.length > 0" class="candidates-grid" :class="[`size-${size}`, { 'killer-mode': gameType === 'killer' }]">
+              <div
+                v-for="num in size"
+                :key="num"
+                class="candidate-cell"
+                :class="getCandidateHighlightClass(rIndex, cIndex, num)"
+              >
+                {{ candidates[rIndex]![cIndex]!.includes(num) ? num : '' }}
               </div>
             </div>
           </div>
-        </div>
-        </div>
-        <div class="paused-overlay" v-if="isPaused">
-          <h2>PAUSED</h2>
-          <button class="game-btn primary-action" @click="resumeTimer">Resume</button>
         </div>
       </div>
 
@@ -1152,20 +1148,18 @@ onUnmounted(() => {
     color: #dad4f6;
 }
 
-.grid-outer {
+/* Grid Layout - using Flexbox for rows + cells */
+.grid {
+  --grid-max-size: 450px;
+  display: flex;
+  flex-direction: column;
   position: relative;
   width: 100%;
-  max-width: 450px;
-  margin-bottom: 20px;
-}
-
-.grid {
-  display: table;
-  table-layout: fixed;
-  border-collapse: collapse;
+  max-width: var(--grid-max-size);
   background-color: #000;
   border: 3px solid #000;
-  width: 100%;
+  margin-bottom: 20px;
+  gap: 0;
 }
 
 :where(.dark, .dark *) .grid {
@@ -1174,37 +1168,32 @@ onUnmounted(() => {
 }
 
 .paused-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.85);
-    z-index: 100;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    color: white;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.85);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: white;
 }
 
 .row {
-  display: table-row;
+  display: flex;
+  flex-direction: row;
 }
 
 .cell {
-  display: table-cell;
+  flex: 1;
+  aspect-ratio: 1;
+  position: relative;
   background-color: white;
   border: 1px solid #ccc;
   box-sizing: border-box;
-  vertical-align: top;
-  padding: 0;
-}
-
-.cell-inner {
-  position: relative;
-  width: calc(450px / 9);
-  height: calc(450px / 9);
 }
 
 :where(.dark, .dark *) .cell {
